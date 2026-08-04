@@ -68,11 +68,55 @@ export type Report = {
   records?: Lead[]
 }
 
-export type FilterKey =
-  | 'all'
-  | 'reply'
-  | 'call'
-  | 'interview'
-  | 'test'
-  | 'invites'
-  | 'closed'
+export enum EFilterKey {
+  All = 'all',
+  Reply = 'reply',
+  Call = 'call',
+  Interview = 'interview',
+  Test = 'test',
+  Invites = 'invites',
+  Closed = 'closed',
+}
+
+export type FilterKey = `${EFilterKey}`
+
+export enum EButtonVariant {
+  Primary = 'primary',
+  Ghost = 'ghost',
+  Danger = 'danger',
+}
+
+export enum EButtonSize {
+  Small = 'small',
+  Medium = 'medium',
+}
+
+export enum EStatTone {
+  Default = 'default',
+  Warning = 'warning',
+  Danger = 'danger',
+  Success = 'success',
+}
+
+export const FILTER_LABELS: Record<FilterKey, string> = {
+  [EFilterKey.All]: 'Все',
+  [EFilterKey.Reply]: 'Ответить',
+  [EFilterKey.Call]: 'Связаться',
+  [EFilterKey.Interview]: 'Собес',
+  [EFilterKey.Test]: 'Тесты',
+  [EFilterKey.Invites]: 'Приглашения',
+  [EFilterKey.Closed]: 'Закрытые',
+}
+
+export const LEAD_TAG_LABELS: Record<LeadTag, string> = {
+  reply: 'ответить',
+  call: 'связаться',
+  interview: 'собес',
+  test: 'тест',
+  invite: 'приглашение',
+  closed: 'закрыто',
+}
+
+export const DEFAULT_SYNC_DAYS = 60
+export const DONE_STORAGE_KEY = 'hh-leads-done'
+export const SESSION_STORAGE_KEY = 'hh-leads-session-id'

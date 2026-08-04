@@ -1,72 +1,66 @@
 <script setup lang="ts">
+/**
+ * Компактный тег типа лида.
+ */
+import { computed, useCssModule } from 'vue'
 import type { LeadTag } from '@/types/report'
+import { LEAD_TAG_LABELS } from '@/types/report'
 
 const props = defineProps<{
   tag: LeadTag
-  active?: boolean
 }>()
 
-const labels: Record<LeadTag, string> = {
-  reply: 'ответить',
-  call: 'связаться',
-  interview: 'собес',
-  test: 'тест',
-  invite: 'приглашение',
-  closed: 'закрыто',
-}
+const $style = useCssModule()
+
+const classList = computed(() => [$style.UiPill, $style[`_${props.tag}`]])
 </script>
 
 <template>
-  <span
-    :class="[
-      $style.uiPill,
-      $style[`_${props.tag}`],
-      props.active && $style._active,
-    ]"
-  >
-    {{ labels[props.tag] }}
-  </span>
+  <span :class="classList">{{ LEAD_TAG_LABELS[tag] }}</span>
 </template>
 
 <style module lang="scss">
-.uiPill {
+.UiPill {
   display: inline-flex;
   align-items: center;
-  padding: 0.15rem 0.55rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  background: #f5f5f4;
+  min-height: 1.5rem;
+  padding: 0.1rem 0.45rem;
+  border: 0.0625rem solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-raised);
   color: var(--color-muted);
-  border: 0.0625rem solid var(--color-border);
-
-  &._active {
-    outline: 0.125rem solid rgba(15, 118, 110, 0.25);
-  }
+  @include text(mono);
+  font-size: 0.6875rem;
+  white-space: nowrap;
 
   &._reply,
   &._call {
-    background: #fff7ed;
     color: var(--color-warning);
-    border-color: #fed7aa;
+    border-color: var(--color-warning);
+    background: var(--color-warning-soft);
   }
 
   &._interview {
-    background: #ecfdf5;
     color: var(--color-success);
-    border-color: #a7f3d0;
+    border-color: var(--color-success);
+    background: var(--color-success-soft);
   }
 
   &._test {
-    background: var(--color-accent-soft);
-    color: var(--color-accent);
-    border-color: #99f6e4;
+    color: var(--rail-test);
+    border-color: var(--rail-test);
+    background: var(--color-panel);
+  }
+
+  &._invite {
+    color: var(--color-muted);
+    border-color: var(--color-line-strong);
   }
 
   &._closed {
-    background: #fef2f2;
     color: var(--color-danger);
-    border-color: #fecaca;
+    border-color: var(--color-danger);
+    background: var(--color-danger-soft);
   }
 }
 </style>

@@ -1,37 +1,97 @@
 <script setup lang="ts">
-defineProps<{
-  modelValue: string
-  placeholder?: string
-  type?: string
+/**
+ * Текстовое поле UI-kit с v-model.
+ */
+import { computed, useCssModule } from 'vue'
+
+const props = withDefaults(
+  defineProps<{
+    modelValue: string
+    placeholder?: string
+    type?: string
+    disabled?: boolean
+    invalid?: boolean
+  }>(),
+  {
+    placeholder: '',
+    type: 'text',
+    disabled: false,
+    invalid: false,
+  },
+)
+
+const emit = defineEmits<{
+  'update:modelValue': [value: string]
+  focus: [event: FocusEvent]
+  blur: [event: FocusEvent]
 }>()
 
-defineEmits<{
-  'update:modelValue': [value: string]
-}>()
+const $style = useCssModule()
+
+const classList = computed(() => [
+  $style.UiTextInput,
+  {
+    [$style._invalid]: props.invalid,
+    [$style._disabled]: props.disabled,
+  },
+])
+
+/**
+ * Пробрасывает значение инпута в v-model.
+ */
+function handleInput(event: Event): void {
+  const target = event.target as HTMLInputElement
+  emit('update:modelValue', target.value)
+}
 </script>
 
 <template>
   <input
-    :class="$style.uiTextInput"
-    :type="type || 'text'"
+    :class="classList"
+    :type="type"
     :value="modelValue"
     :placeholder="placeholder"
-    @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
+    :disabled="disabled"
+    :aria-invalid="invalid || undefined"
+    @input="handleInput"
+    @focus="emit('focus', $event)"
+    @blur="emit('blur', $event)"
   />
 </template>
 
 <style module lang="scss">
-.uiTextInput {
+.UiTextInput {
   width: 100%;
-  border: 0.0625rem solid var(--color-border);
-  border-radius: 0.5rem;
-  background: #fff;
-  padding: 0.65rem 0.8rem;
-  color: var(--color-text);
+  min-height: 2.875rem;
+  padding: 0.55rem 0.85rem;
+  border: 0.0625rem solid var(--color-line);
+  border-radius: var(--radius);
+  background: var(--color-raised);
+  color: var(--color-ink);
+  transition: border-color var(--dur) var(--ease);
+
+  &::placeholder {
+    color: var(--color-faint);
+  }
+
+  &:hover:not(:disabled) {
+    border-color: var(--color-line-strong);
+  }
 
   &:focus {
-    outline: 0.125rem solid rgba(15, 118, 110, 0.35);
+    outline: none;
     border-color: var(--color-accent);
+    box-shadow: var(--shadow-focus);
+  }
+
+  &._invalid {
+    border-color: var(--color-danger);
+  }
+
+  &._disabled,
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 }
 </style>

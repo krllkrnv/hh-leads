@@ -1,12 +1,16 @@
 <script setup lang="ts">
+/**
+ * Главная страница: setup или дашборд лидов.
+ */
 import { onMounted } from 'vue'
+import type { FilterKey } from '@/types/report'
+import TheAppBar from '@/components/layout/TheAppBar.vue'
+import TheFooter from '@/components/layout/TheFooter.vue'
 import SetupPanel from '@/components/leads/SetupPanel.vue'
 import LeadFilters from '@/components/leads/LeadFilters.vue'
 import LeadsTable from '@/components/leads/LeadsTable.vue'
 import SummaryCharts from '@/components/leads/SummaryCharts.vue'
-import UiButton from '@/components/ui/UiButton.vue'
 import { useReport } from '@/composables/useReport'
-import type { FilterKey } from '@/types/report'
 
 const {
   state,
@@ -25,21 +29,41 @@ onMounted(() => {
   void bootstrap()
 })
 
-async function onSync(payload: { cookie: string; days: number; hhHost: string }) {
+/**
+ * Синхронизация по cookie из SetupPanel.
+ */
+async function onSync(payload: {
+  cookie: string
+  days: number
+  hhHost: string
+}): Promise<void> {
   await runSync(payload.cookie, payload.days, payload.hhHost)
 }
 
-async function onUpload(file: File) {
+/**
+ * Загрузка файла отчёта.
+ */
+async function onUpload(file: File): Promise<void> {
   await runUpload(file)
 }
 
-function onFilter(value: FilterKey) {
+/**
+ * Смена активной очереди.
+ */
+function onFilter(value: FilterKey): void {
   state.filter = value
+}
+
+/**
+ * Сброс сессии и возврат на setup.
+ */
+async function onReset(): Promise<void> {
+  await reset()
 }
 </script>
 
 <template>
-  <div :class="$style.dashboardPage">
+  <div :class="$style.DashboardPage">
     <SetupPanel
       v-if="!state.report"
       :loading="state.loading"
@@ -48,17 +72,12 @@ function onFilter(value: FilterKey) {
     />
 
     <template v-else>
-      <header :class="$style.top">
-        <div>
-          <h1 :class="$style.title">Лиды hh</h1>
-          <p :class="$style.sub">Полный список из вашего отчёта, без чужих данных.</p>
-        </div>
-        <div :class="$style.actions">
-          <UiButton variant="ghost" :disabled="state.loading" @click="reset()">
-            Сменить данные
-          </UiButton>
-        </div>
-      </header>
+      <TheAppBar
+        subtitle="Фильтры и список из вашего отчёта"
+        show-reset
+        :loading="state.loading"
+        @reset="onReset"
+      />
 
       <SummaryCharts v-if="meta" :meta="meta" />
 
@@ -80,50 +99,45 @@ function onFilter(value: FilterKey) {
       />
     </template>
 
-    <p v-if="state.loading" :class="$style.status">Загрузка…</p>
-    <p v-if="state.error" :class="$style.error">{{ state.error }}</p>
+    <div
+      v-if="state.loading"
+      :class="$style.status"
+      role="status"
+      aria-live="polite"
+    >
+      Загрузка данных…
+    </div>
+    <p v-if="state.error" :class="$style.error" role="alert">
+      {{ state.error }}
+    </p>
+
+    <TheFooter />
   </div>
 </template>
 
 <style module lang="scss">
-.dashboardPage {
-  width: min(72rem, calc(100% - 2rem));
+.DashboardPage {
+  width: min(var(--content-w), calc(100% - 2rem));
   margin: 0 auto;
-  padding: 1.5rem 0 3rem;
-  display: grid;
-  gap: 1.25rem;
-}
-
-.top {
+  padding: 0 0 var(--space-4);
   display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: end;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 100dvh;
 }
 
-.title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 2rem;
-}
-
-.sub {
-  margin: 0.35rem 0 0;
+.status {
+  margin: var(--space-3) 0 0;
+  @include text(mono);
   color: var(--color-muted);
 }
 
-.actions {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.status,
 .error {
-  margin: 0;
-}
-
-.error {
+  margin: var(--space-3) 0 0;
+  padding: 0.85rem 1rem;
+  border-left: 0.125rem solid var(--color-danger);
+  background: var(--color-danger-soft);
   color: var(--color-danger);
+  @include text(caption);
 }
 </style>

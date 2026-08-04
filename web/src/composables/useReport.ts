@@ -5,13 +5,20 @@ import {
   syncReport,
   uploadReport,
 } from '@/api/reportRepo'
-import type { FilterKey, Lead, Report } from '@/types/report'
-
-const DONE_KEY = 'hh-leads-done'
+import {
+  DONE_STORAGE_KEY,
+  EFilterKey,
+  type FilterKey,
+  type Lead,
+  type Report,
+} from '@/types/report'
 
 function loadDoneMap(): Record<string, boolean> {
   try {
-    return JSON.parse(localStorage.getItem(DONE_KEY) || '{}') as Record<string, boolean>
+    return JSON.parse(localStorage.getItem(DONE_STORAGE_KEY) || '{}') as Record<
+      string,
+      boolean
+    >
   } catch {
     return {}
   }
@@ -27,12 +34,27 @@ type ReportState = {
   doneMap: Record<string, boolean>
 }
 
+type FilterCounts = Record<FilterKey, number>
+
+const EMPTY_COUNTS: FilterCounts = {
+  [EFilterKey.All]: 0,
+  [EFilterKey.Reply]: 0,
+  [EFilterKey.Call]: 0,
+  [EFilterKey.Interview]: 0,
+  [EFilterKey.Test]: 0,
+  [EFilterKey.Invites]: 0,
+  [EFilterKey.Closed]: 0,
+}
+
+/**
+ * Состояние отчёта: sync/upload, фильтры очередей, локальные «сделано».
+ */
 export function useReport() {
   const state = reactive<ReportState>({
     report: null,
     loading: false,
     error: '',
-    filter: 'all',
+    filter: EFilterKey.All,
     query: '',
     hideClosed: true,
     doneMap: loadDoneMap(),
@@ -40,83 +62,70 @@ export function useReport() {
 
   const meta = computed(() => state.report?.meta ?? null)
 
-  const filterCounts = computed(() => {
+  const filterCounts = computed<FilterCounts>(() => {
     const leads = state.report?.leads
     if (!leads) {
-      return {
-        all: 0,
-        reply: 0,
-        call: 0,
-        interview: 0,
-        test: 0,
-        invites: 0,
-        closed: 0,
-      }
+      return { ...EMPTY_COUNTS }
     }
     return {
-      all: leads.all.length,
-      reply: leads.reply.length,
-      call: leads.contact.length,
-      interview: leads.interview.length,
-      test: leads.tests.length,
-      invites: leads.invites.length,
-      closed: leads.closed.length,
+      [EFilterKey.All]: leads.all.length,
+      [EFilterKey.Reply]: leads.reply.length,
+      [EFilterKey.Call]: leads.contact.length,
+      [EFilterKey.Interview]: leads.interview.length,
+      [EFilterKey.Test]: leads.tests.length,
+      [EFilterKey.Invites]: leads.invites.length,
+      [EFilterKey.Closed]: leads.closed.length,
     }
   })
 
-  const visibleLeads = computed(() => {
+  const visibleLeads = computed<Lead[]>(() => {
     const leads = state.report?.leads
-    if (!leads) return [] as Lead[]
-
-    let list: Lead[]
-    switch (state.filter) {
-      case 'reply':
-        list = leads.reply
-        break
-      case 'call':
-        list = leads.contact
-        break
-      case 'interview':
-        list = leads.interview
-        break
-      case 'test':
-        list = leads.tests
-        break
-      case 'invites':
-        list = leads.invites
-        break
-      case 'closed':
-        list = leads.closed
-        break
-      default:
-        list = leads.all
+    if (!leads) {
+      return []
     }
 
+    const byFilter: Record<FilterKey, Lead[]> = {
+      [EFilterKey.All]: leads.all,
+      [EFilterKey.Reply]: leads.reply,
+      [EFilterKey.Call]: leads.contact,
+      [EFilterKey.Interview]: leads.interview,
+      [EFilterKey.Test]: leads.tests,
+      [EFilterKey.Invites]: leads.invites,
+      [EFilterKey.Closed]: leads.closed,
+    }
+
+    const list = byFilter[state.filter] ?? leads.all
     const q = state.query.trim().toLowerCase()
+
     return list.filter((lead) => {
       if (
         state.hideClosed
-        && state.filter !== 'closed'
+        && state.filter !== EFilterKey.Closed
         && (lead.closed || lead.tag === 'closed')
       ) {
         return false
       }
-      if (!q) return true
+      if (!q) {
+        return true
+      }
       const hay = `${lead.company} ${lead.vacancy} ${lead.why} ${lead.status}`.toLowerCase()
       return hay.includes(q)
     })
   })
 
-  function setDone(id: string, value: boolean) {
+  /**
+   * Сохраняет чекбокс «сделано» в localStorage.
+   */
+  function setDone(id: string, value: boolean): void {
     state.doneMap = { ...state.doneMap, [id]: value }
-    localStorage.setItem(DONE_KEY, JSON.stringify(state.doneMap))
+    localStorage.setItem(DONE_STORAGE_KEY, JSON.stringify(state.doneMap))
   }
 
-  function isDone(id: string) {
+  function isDone(id: string): boolean {
     return Boolean(state.doneMap[id])
   }
 
-  async function bootstrap() {
+  async function bootstrap(): Promise<void> {
     state.loading = true
     state.error = ''
     try {
@@ -128,7 +137,7 @@ export function useReport() {
     }
   }
 
-  async function runSync(cookie: string, days: number, hhHost?: string) {
+  async function runSync(cookie: string, days: number, hhHost?: string): Promise<void> {
     state.loading = true
     state.error = ''
     try {
@@ -145,7 +154,7 @@ export function useReport() {
     }
   }
 
-  async function runUpload(file: File) {
+  async function runUpload(file: File): Promise<void> {
     state.loading = true
     state.error = ''
     try {
@@ -158,7 +167,7 @@ export function useReport() {
     }
   }
 
-  async function reset() {
+  async function reset(): Promise<void> {
     await clearServerSession()
     state.report = null
     state.error = ''

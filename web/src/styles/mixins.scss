@@ -1,0 +1,92 @@
+$bp-mobile: 40rem;
+$bp-tablet: 56rem;
+$bp-desktop: 72rem;
+
+@mixin respond-to($breakpoint) {
+  @if $breakpoint == mobile {
+    @media (max-width: #{$bp-mobile}) {
+      @content;
+    }
+  } @else if $breakpoint == tablet {
+    @media (max-width: #{$bp-tablet}) {
+      @content;
+    }
+  } @else if $breakpoint == from-tablet {
+    @media (min-width: #{$bp-mobile}) {
+      @content;
+    }
+  } @else if $breakpoint == from-desktop {
+    @media (min-width: #{$bp-tablet}) {
+      @content;
+    }
+  }
+}
+
+@mixin fade-up($delay: 0ms) {
+  animation: fadeUp var(--dur) var(--ease) both;
+  animation-delay: $delay;
+}
+
+/// Typography contract (Ida-style text mixin)
+@mixin text($role) {
+  @if $role == display {
+    font-family: var(--font-display);
+    font-size: clamp(2.75rem, 8vw, 4.5rem);
+    font-weight: 800;
+    line-height: 0.92;
+    letter-spacing: -0.045em;
+  } @else if $role == h1 {
+    font-family: var(--font-display);
+    font-size: clamp(1.75rem, 3.5vw, 2.25rem);
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+  } @else if $role == h2 {
+    font-family: var(--font-display);
+    font-size: 1.125rem;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+  } @else if $role == body {
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1.5;
+  } @else if $role == body-lg {
+    font-family: var(--font-sans);
+    font-size: 1.0625rem;
+    font-weight: 400;
+    line-height: 1.55;
+  } @else if $role == caption {
+    font-family: var(--font-sans);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.4;
+  } @else if $role == label {
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  } @else if $role == mono {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.35;
+    font-variant-numeric: tabular-nums;
+  } @else if $role == mono-lg {
+    font-family: var(--font-mono);
+    font-size: 1.75rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.04em;
+    font-variant-numeric: tabular-nums;
+  } @else if $role == button {
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.01em;
+  }
+}
