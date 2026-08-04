@@ -85,13 +85,21 @@ def lead_tag(rec: ChatRecord) -> str:
         return "reply"
     if rec.strong_contact:
         return "call"
-    if rec.state_id.lower() == "interview" or rec.state_name == "Собеседование":
+    if (
+        rec.state_id.lower() == "interview"
+        or rec.state_name == "Собеседование"
+        or rec.action == "Собеседование / встреча"
+    ):
         return "interview"
     if "Тестовые" in rec.categories or rec.action == "Тестовое задание":
         return "test"
     if "Приглашения" in rec.categories:
         return "invite"
-    return "invite"
+    if rec.action == "Ждать ответа HR":
+        return "wait"
+    if rec.action == "Автоответ / бот":
+        return "bot"
+    return "discuss"
 
 
 def clean_why(text: str) -> str:
@@ -149,32 +157,44 @@ def build_report(
 
     leads = [record_to_lead(r) for r in records]
     reply = [l for l in leads if l["action"] == "Ответить работодателю"]
-    interview_hh = [l for l in leads if l["status"] == "Собеседование"]
+    interview_hh = [l for l in leads if l["tag"] == "interview" or l["status"] == "Собеседование"]
     contact = [l for l in leads if l["strong"]]
-    tests = [l for l in leads if "Тестовые" in (l.get("categories") or [])]
-    invites = [l for l in leads if "Приглашения" in (l.get("categories") or [])]
+    tests = [l for l in leads if l["tag"] == "test" or "Тестовые" in (l.get("categories") or [])]
+    invites = [l for l in leads if l["tag"] == "invite" or "Приглашения" in (l.get("categories") or [])]
+    wait = [l for l in leads if l["tag"] == "wait"]
+    bot = [l for l in leads if l["tag"] == "bot"]
+    closed = [l for l in leads if l["tag"] == "closed" or l["closed"]]
 
-    # unique union for dashboard "all"
-    rank = {"reply": 5, "call": 4, "interview": 3, "test": 2, "invite": 1, "closed": 0}
-    merged: dict[str, dict[str, Any]] = {}
-    for bucket in (reply, interview_hh, contact, tests, invites):
-        for item in bucket:
-            prev = merged.get(item["id"])
-            if not prev or rank.get(item["tag"], 0) > rank.get(prev["tag"], 0):
-                merged[item["id"]] = item
-    all_leads = list(merged.values())
-    order = {"reply": 0, "call": 1, "interview": 2, "test": 3, "invite": 4, "closed": 5}
-    all_leads.sort(key=lambda x: (order.get(x["tag"], 9), x.get("updated") or ""), reverse=False)
+    order = {
+        "reply": 0,
+        "call": 1,
+        "interview": 2,
+        "test": 3,
+        "invite": 4,
+        "wait": 5,
+        "bot": 6,
+        "discuss": 7,
+        "closed": 8,
+    }
+    all_leads = sorted(
+        leads,
+        key=lambda x: (order.get(str(x.get("tag")), 9), x.get("updated") or ""),
+    )
 
-    period = f"последние {days} дней"
+    period = f"Последние {days} дней"
+    period_from = None
     if since is not None:
-        period = f"{since.date().isoformat()} — сейчас ({days} дн.)"
+        period_from = since.date().isoformat()
+        period = f"С {period_from}"
+
+    exported_at = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
 
     return {
         "meta": {
             "period": period,
+            "periodFrom": period_from,
             "days": days,
-            "exportedAt": datetime.now().astimezone().strftime("%Y-%m-%d %H:%M"),
+            "exportedAt": exported_at,
             "source": source,
             "total": len(records),
             "invites": counts["invites"],
@@ -204,7 +224,9 @@ def build_report(
             "contact": contact,
             "tests": tests,
             "invites": invites,
-            "closed": [l for l in all_leads if l["tag"] == "closed" or l["closed"]],
+            "wait": wait,
+            "bot": bot,
+            "closed": closed,
         },
         "records": leads,
     }

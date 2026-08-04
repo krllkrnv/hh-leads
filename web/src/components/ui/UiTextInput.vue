@@ -11,12 +11,16 @@ const props = withDefaults(
     type?: string
     disabled?: boolean
     invalid?: boolean
+    min?: string | number
+    max?: string | number
   }>(),
   {
     placeholder: '',
     type: 'text',
     disabled: false,
     invalid: false,
+    min: undefined,
+    max: undefined,
   },
 )
 
@@ -52,6 +56,8 @@ function handleInput(event: Event): void {
     :value="modelValue"
     :placeholder="placeholder"
     :disabled="disabled"
+    :min="min"
+    :max="max"
     :aria-invalid="invalid || undefined"
     @input="handleInput"
     @focus="emit('focus', $event)"

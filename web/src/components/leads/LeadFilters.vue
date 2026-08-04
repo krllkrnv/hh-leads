@@ -32,6 +32,8 @@ const FILTER_ORDER: FilterKey[] = [
   EFilterKey.Interview,
   EFilterKey.Test,
   EFilterKey.Invites,
+  EFilterKey.Wait,
+  EFilterKey.Bot,
   EFilterKey.Closed,
 ]
 

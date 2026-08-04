@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Шапка приложения: wordmark HHLeads + действия.
+ * Шапка: wordmark + обновление / экспорт / сброс.
  */
 import BrandTitle from '@/components/ui/BrandTitle.vue'
 import UiButton from '@/components/ui/UiButton.vue'
@@ -8,11 +8,13 @@ import { EButtonSize, EButtonVariant } from '@/types/report'
 
 defineProps<{
   subtitle?: string
-  showReset?: boolean
+  showActions?: boolean
   loading?: boolean
 }>()
 
 const emit = defineEmits<{
+  refresh: []
+  export: []
   reset: []
 }>()
 </script>
@@ -23,7 +25,23 @@ const emit = defineEmits<{
       <BrandTitle size="h1" />
       <p v-if="subtitle" :class="$style.subtitle">{{ subtitle }}</p>
     </div>
-    <div v-if="showReset" :class="$style.actions">
+    <div v-if="showActions" :class="$style.actions">
+      <UiButton
+        :variant="EButtonVariant.Ghost"
+        :size="EButtonSize.Small"
+        :disabled="loading"
+        @click="emit('export')"
+      >
+        JSON
+      </UiButton>
+      <UiButton
+        :variant="EButtonVariant.Ghost"
+        :size="EButtonSize.Small"
+        :disabled="loading"
+        @click="emit('refresh')"
+      >
+        Обновить
+      </UiButton>
       <UiButton
         :variant="EButtonVariant.Ghost"
         :size="EButtonSize.Small"
@@ -61,6 +79,7 @@ const emit = defineEmits<{
 
 .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 </style>

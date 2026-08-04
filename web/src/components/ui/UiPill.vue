@@ -57,6 +57,13 @@ const classList = computed(() => [$style.UiPill, $style[`_${props.tag}`]])
     border-color: var(--color-line-strong);
   }
 
+  &._wait,
+  &._bot,
+  &._discuss {
+    color: var(--color-faint);
+    border-color: var(--color-line);
+  }
+
   &._closed {
     color: var(--color-danger);
     border-color: var(--color-danger);

@@ -1,10 +1,8 @@
 <script setup lang="ts">
 /**
- * Футер с контактами автора и текущей датой.
+ * Футер: контакты и дата.
  */
 const AUTHOR_NAME = 'Кирилл Корнеев'
-const AUTHOR_PHONE_LABEL = '+7 (993) 486-76-08'
-const AUTHOR_PHONE_HREF = 'tel:+79934867608'
 const AUTHOR_EMAIL = 'krllkrnv@yandex.ru'
 const AUTHOR_TELEGRAM = 'kkorneev02'
 const AUTHOR_GITHUB = 'krllkrnv'
@@ -23,10 +21,6 @@ const todayIso = now.toISOString().slice(0, 10)
     <div :class="$style.author">
       <span :class="$style.name">{{ AUTHOR_NAME }}</span>
       <span :class="$style.sep" aria-hidden="true">·</span>
-      <a :class="$style.link" :href="AUTHOR_PHONE_HREF">
-        {{ AUTHOR_PHONE_LABEL }}
-      </a>
-      <span :class="$style.sep" aria-hidden="true">·</span>
       <a :class="$style.link" :href="`mailto:${AUTHOR_EMAIL}`">
         {{ AUTHOR_EMAIL }}
       </a>
@@ -38,7 +32,7 @@ const todayIso = now.toISOString().slice(0, 10)
         target="_blank"
         rel="noreferrer"
       >
-        Telegram @{{ AUTHOR_TELEGRAM }}
+        Telegram
       </a>
       <span :class="$style.sep" aria-hidden="true">·</span>
       <a
@@ -50,9 +44,7 @@ const todayIso = now.toISOString().slice(0, 10)
         GitHub
       </a>
       <span :class="$style.sep" aria-hidden="true">·</span>
-      <time :class="$style.date" :datetime="todayIso">
-        {{ todayLabel }}
-      </time>
+      <time :class="$style.date" :datetime="todayIso">{{ todayLabel }}</time>
     </div>
   </footer>
 </template>
@@ -60,10 +52,12 @@ const todayIso = now.toISOString().slice(0, 10)
 <style module lang="scss">
 .TheFooter {
   margin-top: auto;
-  padding: var(--space-5) 0 var(--space-4);
+  padding: var(--space-6) 0 var(--space-4);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-3);
   border-top: 0.0625rem solid var(--color-line);
-  display: grid;
-  gap: var(--space-2);
 }
 
 .author,
@@ -71,7 +65,7 @@ const todayIso = now.toISOString().slice(0, 10)
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.35rem 0;
+  gap: 0.35rem 0.5rem;
 }
 
 .name {
@@ -86,17 +80,16 @@ const todayIso = now.toISOString().slice(0, 10)
   text-decoration: none;
 
   &:hover {
-    color: var(--color-accent);
+    color: var(--color-ink);
   }
 }
 
 .sep {
-  margin: 0 0.4rem;
   color: var(--color-line-strong);
 }
 
 .date {
-  @include text(mono);
+  @include text(caption);
   color: var(--color-faint);
 }
 </style>

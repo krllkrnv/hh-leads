@@ -10,11 +10,13 @@ import { DEFAULT_SYNC_DAYS, EButtonVariant } from '@/types/report'
 
 const props = defineProps<{
   loading?: boolean
+  canCancelSetup?: boolean
 }>()
 
 const emit = defineEmits<{
   sync: [payload: { cookie: string; days: number; hhHost: string }]
   upload: [file: File]
+  cancelSetup: []
 }>()
 
 const cookie = ref('')
@@ -27,11 +29,14 @@ const fileName = ref('')
  * Отправляет cookie и параметры периода на sync.
  */
 function handleSync(): void {
+  const clamped = Math.min(180, Math.max(1, Number(days.value) || DEFAULT_SYNC_DAYS))
+  days.value = String(clamped)
   emit('sync', {
     cookie: cookie.value.trim(),
-    days: Number(days.value) || DEFAULT_SYNC_DAYS,
+    days: clamped,
     hhHost: hhHost.value.trim(),
   })
+  cookie.value = ''
 }
 
 /**
@@ -100,7 +105,7 @@ function handlePickFile(): void {
         <div :class="$style.row">
           <label :class="$style.field">
             <span :class="$style.fieldLabel">Дней</span>
-            <UiTextInput v-model="days" type="number" />
+            <UiTextInput v-model="days" type="number" min="1" max="180" />
           </label>
           <label :class="$style.field">
             <span :class="$style.fieldLabel">Host</span>
@@ -115,6 +120,17 @@ function handlePickFile(): void {
           full-width
         >
           Загрузить чаты
+        </UiButton>
+
+        <UiButton
+          v-if="canCancelSetup"
+          type="button"
+          :variant="EButtonVariant.Ghost"
+          :disabled="props.loading"
+          full-width
+          @click="emit('cancelSetup')"
+        >
+          Вернуться к отчёту
         </UiButton>
       </form>
 

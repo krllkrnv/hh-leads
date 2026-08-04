@@ -25,6 +25,10 @@ const props = defineProps<{
   logs: LogItem[]
 }>()
 
+const emit = defineEmits<{
+  cancel: []
+}>()
+
 const logRef = ref<HTMLElement | null>(null)
 
 const title = computed(() => {
@@ -110,8 +114,6 @@ watch(
       aria-live="polite"
       aria-busy="true"
     >
-      <div :class="$style.glow" aria-hidden="true" />
-
       <header :class="$style.header">
         <div :class="$style.pulseWrap" aria-hidden="true">
           <span :class="$style.pulseCore" />
@@ -121,10 +123,20 @@ watch(
           <h2 :class="$style.title">{{ title }}</h2>
           <p :class="$style.message">{{ message || 'Работаю…' }}</p>
         </div>
-        <div v-if="total > 0" :class="$style.counter">
-          <span :class="$style.counterValue">{{ current }}</span>
-          <span :class="$style.counterSep">/</span>
-          <span>{{ total }}</span>
+        <div :class="$style.headerAside">
+          <div v-if="total > 0" :class="$style.counter">
+            <span :class="$style.counterValue">{{ current }}</span>
+            <span :class="$style.counterSep">/</span>
+            <span>{{ total }}</span>
+          </div>
+          <button
+            v-if="mode === 'sync' || mode === 'upload'"
+            type="button"
+            :class="$style.cancelBtn"
+            @click="emit('cancel')"
+          >
+            Стоп
+          </button>
         </div>
       </header>
 
@@ -192,16 +204,6 @@ watch(
   background: var(--color-panel);
 }
 
-.glow {
-  pointer-events: none;
-  position: absolute;
-  inset: -40% auto auto -20%;
-  width: 18rem;
-  height: 18rem;
-  background: radial-gradient(circle, rgb(59 130 246 / 18%), transparent 70%);
-  animation: glowDrift 6s var(--ease) infinite alternate;
-}
-
 .header {
   position: relative;
   display: grid;
@@ -250,6 +252,32 @@ watch(
   font-size: 1.25rem;
   color: var(--color-ink);
   font-variant-numeric: tabular-nums;
+}
+
+.headerAside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.cancelBtn {
+  appearance: none;
+  border: 0.0625rem solid var(--color-line-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-muted);
+  padding: 0.35rem 0.65rem;
+  @include text(caption);
+  font-weight: 600;
+  cursor: pointer;
+  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+
+  &:hover {
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+  }
 }
 
 .counterValue {
@@ -428,16 +456,6 @@ watch(
 
   to {
     background-position: -200% 0;
-  }
-}
-
-@keyframes glowDrift {
-  from {
-    transform: translate(0, 0);
-  }
-
-  to {
-    transform: translate(2rem, 1rem);
   }
 }
 

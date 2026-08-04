@@ -139,28 +139,55 @@ class ChatikClient:
         params: dict[str, Any] | None = None,
         *,
         optional: bool = False,
+        retries: int = 4,
     ) -> dict[str, Any] | None:
-        time.sleep(self.delay)
-        resp = self._client.get(path, params=params)
-        if resp.status_code in (401, 403):
-            if optional:
-                return None
-            raise HhAuthError(
-                f"Сессия недействительна ({resp.status_code}). "
-                "Обновите cookie из браузера после входа на hh.ru."
-            )
-        if resp.status_code >= 400:
-            if optional:
-                return None
-            raise HhApiError(f"Chatik error {resp.status_code} {path}: {resp.text[:500]}")
-        if not resp.content:
-            return {}
-        try:
-            return resp.json()
-        except Exception:
-            if optional:
-                return None
-            raise
+        last_error: Exception | None = None
+        for attempt in range(max(1, retries)):
+            time.sleep(self.delay if attempt == 0 else min(8.0, self.delay * (2**attempt) + 0.4))
+            try:
+                resp = self._client.get(path, params=params)
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+                if attempt + 1 >= retries:
+                    if optional:
+                        return None
+                    raise HhApiError(f"Chatik network error {path}: {exc}") from exc
+                continue
+
+            if resp.status_code in (401, 403):
+                if optional:
+                    return None
+                raise HhAuthError(
+                    f"Сессия недействительна ({resp.status_code}). "
+                    "Обновите cookie из браузера после входа на hh.ru."
+                )
+            if resp.status_code in (429, 500, 502, 503, 504):
+                last_error = HhApiError(
+                    f"Chatik temporary {resp.status_code} {path}: {resp.text[:200]}"
+                )
+                if attempt + 1 >= retries:
+                    if optional:
+                        return None
+                    raise last_error
+                continue
+            if resp.status_code >= 400:
+                if optional:
+                    return None
+                raise HhApiError(f"Chatik error {resp.status_code} {path}: {resp.text[:500]}")
+            if not resp.content:
+                return {}
+            try:
+                return resp.json()
+            except Exception as exc:
+                if optional:
+                    return None
+                raise HhApiError(f"Chatik invalid JSON {path}: {exc}") from exc
+
+        if optional:
+            return None
+        if last_error:
+            raise last_error
+        return None
 
     def get_applicant_id(self) -> str | None:
         if self._applicant_id is not None:
@@ -254,11 +281,49 @@ class ChatikClient:
             "do_not_track_session_events": "true",
         }
         applicant_id = self.get_applicant_id()
+        data: dict[str, Any] | None = None
         if applicant_id:
             params["applicantId"] = applicant_id
             data = self._get("/chatik/api/chat_data", params=params, optional=True)
-            if data is not None:
-                return data
-            params.pop("applicantId", None)
-        data = self._get("/chatik/api/chat_data", params=params)
-        return data or {}
+            if data is None:
+                params.pop("applicantId", None)
+                data = self._get("/chatik/api/chat_data", params=params)
+        else:
+            data = self._get("/chatik/api/chat_data", params=params)
+        data = data or {}
+        return self._paginate_messages(chat_id, data, params)
+
+    def _paginate_messages(
+        self,
+        chat_id: str,
+        data: dict[str, Any],
+        base_params: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Дочитывает страницы messages, если Chatik отдал pages > 1."""
+        messages = data.get("messages")
+        if not isinstance(messages, dict):
+            return data
+        items = list(messages.get("items") or [])
+        pages = messages.get("pages")
+        try:
+            page_count = int(pages) if pages is not None else 1
+        except (TypeError, ValueError):
+            page_count = 1
+        if page_count <= 1:
+            return data
+
+        for page in range(1, min(page_count, 20)):
+            page_params = dict(base_params)
+            page_params["chatId"] = chat_id
+            page_params["page"] = page
+            more = self._get("/chatik/api/chat_data", params=page_params, optional=True)
+            if not more:
+                break
+            block = more.get("messages") or {}
+            chunk = block.get("items") if isinstance(block, dict) else None
+            if not chunk:
+                break
+            items.extend(chunk)
+        messages["items"] = items
+        data["messages"] = messages
+        return data

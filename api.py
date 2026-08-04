@@ -7,6 +7,8 @@ import queue
 import secrets
 import tempfile
 import threading
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -23,9 +25,23 @@ from report import build_report, records_from_excel
 
 ROOT = Path(__file__).resolve().parent
 WEB_DIST = ROOT / "web" / "dist"
+WEB_DIST_RESOLVED = WEB_DIST.resolve()
 
-# session_id -> report dict (in-memory, single-user local tool)
-_SESSIONS: dict[str, dict[str, Any]] = {}
+MAX_SESSIONS = 32
+SESSION_TTL_SEC = 6 * 60 * 60
+MAX_UPLOAD_BYTES = 15 * 1024 * 1024
+
+
+@dataclass
+class SessionEntry:
+    report: dict[str, Any]
+    touched_at: float = field(default_factory=time.time)
+
+
+# session_id -> report (in-memory, single-user local tool)
+_SESSIONS: dict[str, SessionEntry] = {}
+_CANCEL: dict[str, threading.Event] = {}
+_LOCK = threading.Lock()
 
 app = FastAPI(title="HH Leads Dashboard", version="1.0.0")
 app.add_middleware(
@@ -49,10 +65,69 @@ class SyncBody(BaseModel):
     delay: float = Field(default=0.25, ge=0.0, le=2.0)
 
 
-def _session_id(x_session_id: str | None) -> str:
-    if x_session_id and x_session_id.strip():
-        return x_session_id.strip()
+def _prune_sessions() -> None:
+    now = time.time()
+    expired = [sid for sid, entry in _SESSIONS.items() if now - entry.touched_at > SESSION_TTL_SEC]
+    for sid in expired:
+        _SESSIONS.pop(sid, None)
+        _CANCEL.pop(sid, None)
+    while len(_SESSIONS) > MAX_SESSIONS:
+        oldest = min(_SESSIONS.items(), key=lambda item: item[1].touched_at)[0]
+        _SESSIONS.pop(oldest, None)
+        _CANCEL.pop(oldest, None)
+
+
+def _store_report(sid: str, report: dict[str, Any]) -> None:
+    with _LOCK:
+        _prune_sessions()
+        _SESSIONS[sid] = SessionEntry(report=report)
+        _CANCEL.pop(sid, None)
+
+
+def _get_report(sid: str) -> dict[str, Any] | None:
+    with _LOCK:
+        entry = _SESSIONS.get(sid)
+        if not entry:
+            return None
+        if time.time() - entry.touched_at > SESSION_TTL_SEC:
+            _SESSIONS.pop(sid, None)
+            return None
+        entry.touched_at = time.time()
+        return entry.report
+
+
+def _session_id(x_session_id: str | None, *, allow_client_mint: bool = False) -> str:
+    """Переиспользует известный id; для sync/upload может принять клиентский id для cancel."""
+    candidate = (x_session_id or "").strip()
+    with _LOCK:
+        _prune_sessions()
+        if candidate and candidate in _SESSIONS:
+            return candidate
+        if allow_client_mint and candidate and 16 <= len(candidate) <= 80:
+            return candidate
     return secrets.token_urlsafe(16)
+
+
+def _cancel_event(sid: str) -> threading.Event:
+    with _LOCK:
+        event = _CANCEL.get(sid)
+        if event is None:
+            event = threading.Event()
+            _CANCEL[sid] = event
+        else:
+            event.clear()
+        return event
+
+
+def _is_valid_report(data: Any) -> bool:
+    if not isinstance(data, dict):
+        return False
+    meta = data.get("meta")
+    leads = data.get("leads")
+    if not isinstance(meta, dict) or not isinstance(leads, dict):
+        return False
+    required_lead_keys = ("all", "reply", "interview", "contact", "tests", "invites", "closed")
+    return all(key in leads and isinstance(leads[key], list) for key in required_lead_keys)
 
 
 def _ndjson_line(payload: dict[str, Any]) -> str:
@@ -82,6 +157,18 @@ def _stream_job(worker: Any) -> Iterator[str]:
         yield _ndjson_line(item)
 
 
+def _safe_dist_file(full_path: str) -> Path | None:
+    """Возвращает файл внутри WEB_DIST или None (защита от path traversal)."""
+    candidate = (WEB_DIST / full_path).resolve()
+    try:
+        candidate.relative_to(WEB_DIST_RESOLVED)
+    except ValueError:
+        return None
+    if candidate.is_file():
+        return candidate
+    return None
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -89,23 +176,29 @@ def health() -> dict[str, str]:
 
 @app.post("/api/sync")
 def sync(body: SyncBody, x_session_id: str | None = Header(default=None)) -> dict[str, Any]:
-    sid = _session_id(x_session_id)
+    sid = _session_id(x_session_id, allow_client_mint=True)
+    cancel = _cancel_event(sid)
     try:
         records, since = fetch_records(
             body.cookie,
             body.days,
             delay=body.delay,
             hh_host=body.hhHost,
+            should_cancel=cancel.is_set,
         )
     except HhAuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except HhApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        if "отменена" in str(exc).lower():
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail=f"Sync failed: {exc}") from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Sync failed: {exc}") from exc
 
     report = build_report(records, days=body.days, since=since, source="sync")
-    _SESSIONS[sid] = report
+    _store_report(sid, report)
     return {"sessionId": sid, "report": report}
 
 
@@ -114,7 +207,8 @@ def sync_stream(
     body: SyncBody,
     x_session_id: str | None = Header(default=None),
 ) -> StreamingResponse:
-    sid = _session_id(x_session_id)
+    sid = _session_id(x_session_id, allow_client_mint=True)
+    cancel = _cancel_event(sid)
 
     def worker(put_event: Any) -> None:
         def on_progress(event: ProgressEvent) -> None:
@@ -127,15 +221,25 @@ def sync_stream(
                 delay=body.delay,
                 hh_host=body.hhHost,
                 on_progress=on_progress,
+                should_cancel=cancel.is_set,
             )
             report = build_report(records, days=body.days, since=since, source="sync")
-            _SESSIONS[sid] = report
+            _store_report(sid, report)
             emit(on_progress, "done", "Готово")
             put_event({"type": "done", "sessionId": sid, "report": report})
         except HhAuthError as exc:
             put_event({"type": "error", "sessionId": sid, "message": str(exc), "status": 401})
         except HhApiError as exc:
             put_event({"type": "error", "sessionId": sid, "message": str(exc), "status": 502})
+        except RuntimeError as exc:
+            put_event(
+                {
+                    "type": "error",
+                    "sessionId": sid,
+                    "message": str(exc),
+                    "status": 400,
+                }
+            )
         except Exception as exc:  # noqa: BLE001
             put_event(
                 {
@@ -156,49 +260,82 @@ def sync_stream(
     )
 
 
+@app.post("/api/sync/cancel")
+def cancel_sync(x_session_id: str | None = Header(default=None)) -> dict[str, str]:
+    sid = (x_session_id or "").strip()
+    if not sid:
+        raise HTTPException(status_code=400, detail="Нужен X-Session-Id")
+    with _LOCK:
+        event = _CANCEL.get(sid)
+        if event is None:
+            event = threading.Event()
+            _CANCEL[sid] = event
+        event.set()
+    return {"status": "cancel_requested"}
+
+
+async def _read_upload(file: UploadFile) -> bytes:
+    raw = await file.read(MAX_UPLOAD_BYTES + 1)
+    if not raw:
+        raise HTTPException(status_code=400, detail="Пустой файл")
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Файл больше 15 МБ")
+    return raw
+
+
+def _report_from_upload(name: str, raw: bytes, on_progress: Any | None = None) -> dict[str, Any]:
+    if name.endswith(".json"):
+        if on_progress:
+            emit(on_progress, "parse", "Разбираю JSON-отчёт…")
+        data = json.loads(raw.decode("utf-8"))
+        if not _is_valid_report(data):
+            raise ValueError("JSON должен быть отчётом дашборда (meta + leads)")
+        if on_progress:
+            emit(on_progress, "build", "Подключаю готовый отчёт…")
+        return data
+
+    if name.endswith(".xlsx"):
+        if on_progress:
+            emit(on_progress, "parse", "Разбираю Excel…")
+        with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+            tmp.write(raw)
+            tmp_path = Path(tmp.name)
+        try:
+            records, days = records_from_excel(tmp_path)
+        finally:
+            tmp_path.unlink(missing_ok=True)
+        if not records:
+            raise ValueError("В Excel не найдено чатов. Нужна выгрузка analyze_chats / CLI.")
+        if on_progress:
+            emit(
+                on_progress,
+                "classify",
+                f"Собрано записей из файла: {len(records)}",
+                current=len(records),
+                total=len(records),
+            )
+            emit(on_progress, "build", "Собираю отчёт для дашборда…")
+        return build_report(records, days=days, source="upload")
+
+    raise ValueError("Поддерживаются .xlsx и .json")
+
+
 @app.post("/api/upload")
 async def upload(
     file: UploadFile = File(...),
     x_session_id: str | None = Header(default=None),
 ) -> dict[str, Any]:
-    sid = _session_id(x_session_id)
+    sid = _session_id(x_session_id, allow_client_mint=True)
     name = (file.filename or "").lower()
-    raw = await file.read()
-    if not raw:
-        raise HTTPException(status_code=400, detail="Пустой файл")
-
+    raw = await _read_upload(file)
     try:
-        if name.endswith(".json"):
-            data = json.loads(raw.decode("utf-8"))
-            if isinstance(data, dict) and "meta" in data and "leads" in data:
-                report = data
-            else:
-                raise HTTPException(
-                    status_code=400,
-                    detail="JSON должен быть отчётом дашборда (meta + leads)",
-                )
-        elif name.endswith(".xlsx"):
-            with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
-                tmp.write(raw)
-                tmp_path = Path(tmp.name)
-            try:
-                records, days = records_from_excel(tmp_path)
-            finally:
-                tmp_path.unlink(missing_ok=True)
-            if not records:
-                raise HTTPException(
-                    status_code=400,
-                    detail="В Excel не найдено чатов. Нужна выгрузка analyze_chats / CLI.",
-                )
-            report = build_report(records, days=days, source="upload")
-        else:
-            raise HTTPException(status_code=400, detail="Поддерживаются .xlsx и .json")
-    except HTTPException:
-        raise
+        report = _report_from_upload(name, raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Не удалось разобрать файл: {exc}") from exc
 
-    _SESSIONS[sid] = report
+    _store_report(sid, report)
     return {"sessionId": sid, "report": report}
 
 
@@ -207,75 +344,20 @@ async def upload_stream(
     file: UploadFile = File(...),
     x_session_id: str | None = Header(default=None),
 ) -> StreamingResponse:
-    sid = _session_id(x_session_id)
+    sid = _session_id(x_session_id, allow_client_mint=True)
     name = (file.filename or "upload").lower()
-    raw = await file.read()
-    if not raw:
-        raise HTTPException(status_code=400, detail="Пустой файл")
+    raw = await _read_upload(file)
+    filename = file.filename or name
 
     def worker(put_event: Any) -> None:
         def on_progress(event: ProgressEvent) -> None:
             put_event({"type": "progress", "sessionId": sid, **event})
 
         try:
-            emit(on_progress, "start", f"Принял файл {file.filename or name}")
+            emit(on_progress, "start", f"Принял файл {filename}")
             emit(on_progress, "parse", "Читаю содержимое…")
-
-            if name.endswith(".json"):
-                emit(on_progress, "parse", "Разбираю JSON-отчёт…")
-                data = json.loads(raw.decode("utf-8"))
-                if not (isinstance(data, dict) and "meta" in data and "leads" in data):
-                    put_event(
-                        {
-                            "type": "error",
-                            "sessionId": sid,
-                            "message": "JSON должен быть отчётом дашборда (meta + leads)",
-                            "status": 400,
-                        }
-                    )
-                    return
-                report = data
-                emit(on_progress, "build", "Подключаю готовый отчёт…")
-            elif name.endswith(".xlsx"):
-                emit(on_progress, "parse", "Разбираю Excel…")
-                with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
-                    tmp.write(raw)
-                    tmp_path = Path(tmp.name)
-                try:
-                    records, days = records_from_excel(tmp_path)
-                finally:
-                    tmp_path.unlink(missing_ok=True)
-                if not records:
-                    put_event(
-                        {
-                            "type": "error",
-                            "sessionId": sid,
-                            "message": "В Excel не найдено чатов.",
-                            "status": 400,
-                        }
-                    )
-                    return
-                emit(
-                    on_progress,
-                    "classify",
-                    f"Собрано записей из файла: {len(records)}",
-                    current=len(records),
-                    total=len(records),
-                )
-                emit(on_progress, "build", "Собираю отчёт для дашборда…")
-                report = build_report(records, days=days, source="upload")
-            else:
-                put_event(
-                    {
-                        "type": "error",
-                        "sessionId": sid,
-                        "message": "Поддерживаются .xlsx и .json",
-                        "status": 400,
-                    }
-                )
-                return
-
-            _SESSIONS[sid] = report
+            report = _report_from_upload(name, raw, on_progress=on_progress)
+            _store_report(sid, report)
             emit(on_progress, "done", "Готово")
             put_event({"type": "done", "sessionId": sid, "report": report})
         except Exception as exc:  # noqa: BLE001
@@ -300,15 +382,22 @@ async def upload_stream(
 
 @app.get("/api/report")
 def get_report(x_session_id: str | None = Header(default=None)) -> dict[str, Any]:
-    if not x_session_id or x_session_id not in _SESSIONS:
+    if not x_session_id:
         raise HTTPException(status_code=404, detail="Нет данных сессии. Сделайте sync или upload.")
-    return {"sessionId": x_session_id, "report": _SESSIONS[x_session_id]}
+    report = _get_report(x_session_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Нет данных сессии. Сделайте sync или upload.")
+    return {"sessionId": x_session_id, "report": report}
 
 
 @app.delete("/api/session")
 def clear_session(x_session_id: str | None = Header(default=None)) -> dict[str, str]:
-    if x_session_id and x_session_id in _SESSIONS:
-        del _SESSIONS[x_session_id]
+    if x_session_id:
+        with _LOCK:
+            _SESSIONS.pop(x_session_id, None)
+            event = _CANCEL.pop(x_session_id, None)
+            if event:
+                event.set()
     return {"status": "cleared"}
 
 
@@ -321,7 +410,7 @@ if WEB_DIST.is_dir():
 
     @app.get("/{full_path:path}")
     def spa_fallback(full_path: str) -> FileResponse:
-        candidate = WEB_DIST / full_path
-        if candidate.is_file():
-            return FileResponse(candidate)
+        safe = _safe_dist_file(full_path)
+        if safe is not None:
+            return FileResponse(safe)
         return FileResponse(WEB_DIST / "index.html")

@@ -24,6 +24,10 @@ const {
   bootstrap,
   runSync,
   runUpload,
+  cancelJob,
+  exportReport,
+  openSetup,
+  closeSetup,
   reset,
 } = useReport()
 
@@ -67,17 +71,21 @@ async function onReset(): Promise<void> {
 <template>
   <div :class="$style.DashboardPage">
     <SetupPanel
-      v-if="!state.report"
+      v-if="!state.report || state.showSetup"
       :loading="state.loading"
+      :can-cancel-setup="Boolean(state.report)"
       @sync="onSync"
       @upload="onUpload"
+      @cancel-setup="closeSetup"
     />
 
-    <template v-else>
+    <template v-if="state.report && !state.showSetup">
       <TheAppBar
-        subtitle="Фильтры и список из вашего отчёта"
-        show-reset
+        subtitle="Очередь лидов из чатов hh.ru"
+        show-actions
         :loading="state.loading"
+        @refresh="openSetup"
+        @export="exportReport"
         @reset="onReset"
       />
 
@@ -112,6 +120,7 @@ async function onReset(): Promise<void> {
       :total="state.progressTotal"
       :percent="progressPercent"
       :logs="state.progressLogs"
+      @cancel="cancelJob"
     />
 
     <p v-if="state.error" :class="$style.error" role="alert">

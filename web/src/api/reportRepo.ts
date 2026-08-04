@@ -18,6 +18,25 @@ export function setSessionId(id: string): void {
 }
 
 /**
+ * Гарантирует наличие session id до старта job (для cancel).
+ */
+export function ensureSessionId(): string {
+  const existing = getSessionId()
+  if (existing) {
+    return existing
+  }
+  const id = crypto.randomUUID().replace(/-/g, '') + secretsToken()
+  setSessionId(id)
+  return id
+}
+
+function secretsToken(): string {
+  const bytes = new Uint8Array(8)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+/**
  * Удаляет id серверной сессии.
  */
 export function clearSessionId(): void {
@@ -62,37 +81,44 @@ async function readNdjsonStream(
   let report: Report | null = null
   let streamError: string | null = null
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) {
-      break
-    }
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || ''
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) {
+        break
+      }
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
 
-    for (const line of lines) {
-      const trimmed = line.trim()
-      if (!trimmed) {
-        continue
-      }
-      let event: ProgressEvent
-      try {
-        event = JSON.parse(trimmed) as ProgressEvent
-      } catch {
-        continue
-      }
-      if (event.sessionId) {
-        setSessionId(event.sessionId)
-      }
-      onEvent(event)
-      if (event.type === 'done' && event.report) {
-        report = event.report
-      }
-      if (event.type === 'error') {
-        streamError = event.message || 'Ошибка синхронизации'
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed) {
+          continue
+        }
+        let event: ProgressEvent
+        try {
+          event = JSON.parse(trimmed) as ProgressEvent
+        } catch {
+          continue
+        }
+        if (event.sessionId) {
+          setSessionId(event.sessionId)
+        }
+        onEvent(event)
+        if (event.type === 'done' && event.report) {
+          report = event.report
+        }
+        if (event.type === 'error') {
+          streamError = event.message || 'Ошибка синхронизации'
+        }
       }
     }
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw err
+    }
+    throw err
   }
 
   if (buffer.trim()) {
@@ -158,11 +184,13 @@ type SyncPayload = {
 export async function syncReportStream(
   payload: SyncPayload,
   onEvent: (event: ProgressEvent) => void,
+  signal?: AbortSignal,
 ): Promise<Report> {
   const res = await fetch('/api/sync/stream', {
     method: 'POST',
     headers: headers({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(payload),
+    signal,
   })
   return readNdjsonStream(res, onEvent)
 }
@@ -173,6 +201,7 @@ export async function syncReportStream(
 export async function uploadReportStream(
   file: File,
   onEvent: (event: ProgressEvent) => void,
+  signal?: AbortSignal,
 ): Promise<Report> {
   const form = new FormData()
   form.append('file', file)
@@ -180,8 +209,23 @@ export async function uploadReportStream(
     method: 'POST',
     headers: headers(),
     body: form,
+    signal,
   })
   return readNdjsonStream(res, onEvent)
+}
+
+/**
+ * Просит сервер остановить текущую синхронизацию.
+ */
+export async function cancelSync(): Promise<void> {
+  const sid = getSessionId()
+  if (!sid) {
+    return
+  }
+  await fetch('/api/sync/cancel', {
+    method: 'POST',
+    headers: headers(),
+  }).catch(() => undefined)
 }
 
 /**

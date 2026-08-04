@@ -82,6 +82,7 @@ function showStatus(status: string): boolean {
         :role="lead.chatUrl ? 'link' : undefined"
         @click="onRowActivate(lead, $event)"
         @keydown.enter="openChat(lead)"
+        @keydown.space.prevent="openChat(lead)"
       >
         <div :class="$style.rail" aria-hidden="true" />
 
@@ -213,6 +214,18 @@ function showStatus(status: string): boolean {
 
   .row[data-tag='invite'] & {
     background: var(--rail-invite);
+  }
+
+  .row[data-tag='wait'] & {
+    background: var(--rail-wait);
+  }
+
+  .row[data-tag='bot'] & {
+    background: var(--rail-bot);
+  }
+
+  .row[data-tag='discuss'] & {
+    background: var(--rail-discuss);
   }
 
   .row[data-tag='closed'] & {

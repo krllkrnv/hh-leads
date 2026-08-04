@@ -35,13 +35,20 @@ def fetch_records(
     delay: float = 0.25,
     hh_host: str | None = None,
     on_progress: ProgressCb | None = None,
+    should_cancel: Any | None = None,
 ) -> tuple[list[ChatRecord], datetime]:
     since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    def cancelled() -> bool:
+        return bool(callable(should_cancel) and should_cancel())
 
     emit(on_progress, "start", f"Старт синхронизации за последние {days} дн.")
     emit(on_progress, "auth", "Проверяю cookie и подключаюсь к Chatik…")
 
     with ChatikClient(cookie, delay=delay, hh_host=hh_host) as client:
+        if cancelled():
+            raise RuntimeError("Синхронизация отменена")
+
         applicant_id = client.get_applicant_id()
         if applicant_id:
             emit(on_progress, "auth", "Сессия принята, профиль найден")
@@ -74,6 +81,16 @@ def fetch_records(
 
         records: list[ChatRecord] = []
         for idx, entry in enumerate(chat_entries, start=1):
+            if cancelled():
+                emit(
+                    on_progress,
+                    "warn",
+                    f"Остановлено пользователем после {len(records)} чатов",
+                    current=idx,
+                    total=total,
+                )
+                raise RuntimeError("Синхронизация отменена")
+
             chat = entry["chat"]
             chat_id = str(chat.get("id") or "")
             company = _company_label(entry)

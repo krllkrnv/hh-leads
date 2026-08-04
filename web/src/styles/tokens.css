@@ -1,47 +1,80 @@
-@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Public+Sans:wght@400;500;600;700&display=swap");
+@font-face {
+  font-family: "Manrope";
+  src: url("/fonts/Manrope-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Manrope";
+  src: url("/fonts/Manrope-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Manrope";
+  src: url("/fonts/Manrope-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Manrope";
+  src: url("/fonts/Manrope-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
-  /* Neutral dark + blue UI chrome. HH red only for brand mark. */
-  --color-void: #09090b;
-  --color-bg: #0c0c0e;
-  --color-panel: #141416;
-  --color-raised: #1c1c1f;
-  --color-line: #2a2a2e;
-  --color-line-strong: #3f3f46;
+  /* Dark neutrals; HH red only on brand mark. */
+  --color-void: #0a0e12;
+  --color-bg: #0d1319;
+  --color-panel: #141517;
+  --color-raised: #1c1d1e;
+  --color-line: #2a2e33;
+  --color-line-strong: #3c4044;
 
-  --color-ink: #f4f4f5;
-  --color-muted: #a1a1aa;
-  --color-faint: #71717a;
+  --color-ink: #f3f3f4;
+  --color-muted: #9a9da2;
+  --color-faint: #7a7d81;
 
-  --color-accent: #3b82f6;
-  --color-accent-hover: #60a5fa;
-  --color-accent-soft: #172554;
+  --color-accent: #3d7eff;
+  --color-accent-hover: #5b93ff;
+  --color-accent-soft: rgb(61 126 255 / 14%);
   --color-accent-text: #ffffff;
   --color-hh: #d6001c;
 
-  --color-danger: #f87171;
-  --color-danger-soft: #450a0a;
-  --color-warning: #fbbf24;
-  --color-warning-soft: #422006;
-  --color-success: #34d399;
-  --color-success-soft: #064e3b;
+  --color-danger: #e86a6a;
+  --color-danger-soft: rgb(232 106 106 / 12%);
+  --color-warning: #e0a43a;
+  --color-warning-soft: rgb(224 164 58 / 12%);
+  --color-success: #3cb88a;
+  --color-success-soft: rgb(60 184 138 / 12%);
 
-  --color-focus: rgb(59 130 246 / 40%);
+  --color-focus: rgb(61 126 255 / 35%);
 
   --rail-reply: var(--color-danger);
   --rail-call: var(--color-warning);
   --rail-interview: var(--color-success);
   --rail-test: var(--color-accent);
-  --rail-invite: var(--color-muted);
+  --rail-invite: #8b9098;
+  --rail-wait: #6b7280;
+  --rail-bot: #5a5f66;
+  --rail-discuss: #4b5563;
   --rail-closed: var(--color-faint);
 
-  --font-display: "Bricolage Grotesque", "Arial Narrow", sans-serif;
-  --font-sans: "Public Sans", "Segoe UI", sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-display: "Manrope", system-ui, sans-serif;
+  --font-sans: "Manrope", system-ui, sans-serif;
+  --font-mono: "Manrope", system-ui, sans-serif;
 
   --radius-sm: 0.25rem;
-  --radius: 0.375rem;
-  --radius-lg: 0.625rem;
+  --radius: 0.5rem;
+  --radius-lg: 1rem;
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -53,9 +86,9 @@
   --space-8: 4.5rem;
 
   --shadow-focus: 0 0 0 0.125rem var(--color-focus);
-  --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --dur: 200ms;
-  --content-w: 76rem;
+  --ease: cubic-bezier(0.12, 1, 0.48, 1);
+  --dur: 240ms;
+  --content-w: 72rem;
   --header-h: 4.25rem;
 }
 
@@ -75,8 +108,10 @@ body {
   margin: 0;
   min-height: 100dvh;
   font-family: var(--font-sans);
-  font-size: 1rem;
+  font-size: 0.9375rem;
+  font-weight: 400;
   line-height: 1.45;
+  letter-spacing: -0.01em;
   color: var(--color-ink);
   background: var(--color-bg);
 }
@@ -121,7 +156,7 @@ a:hover {
 @keyframes fadeUp {
   from {
     opacity: 0;
-    transform: translateY(0.5rem);
+    transform: translateY(0.4rem);
   }
 
   to {

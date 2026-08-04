@@ -1,6 +1,8 @@
-import { computed, reactive } from 'vue'
+import { computed, reactive, watch } from 'vue'
 import {
+  cancelSync,
   clearServerSession,
+  ensureSessionId,
   fetchReport,
   syncReportStream,
   uploadReportStream,
@@ -10,6 +12,7 @@ import { isFrontendLead } from '@/lib/leadDisplay'
 import {
   DONE_STORAGE_KEY,
   EFilterKey,
+  PREFS_STORAGE_KEY,
   type FilterKey,
   type Lead,
   type Report,
@@ -23,6 +26,31 @@ function loadDoneMap(): Record<string, boolean> {
     >
   } catch {
     return {}
+  }
+}
+
+type Prefs = {
+  filter: FilterKey
+  hideClosed: boolean
+  frontendOnly: boolean
+}
+
+function loadPrefs(): Prefs {
+  const keys = new Set<string>(Object.values(EFilterKey))
+  try {
+    const raw = JSON.parse(localStorage.getItem(PREFS_STORAGE_KEY) || '{}') as Partial<Prefs>
+    const filter = keys.has(String(raw.filter)) ? (raw.filter as FilterKey) : EFilterKey.All
+    return {
+      filter,
+      hideClosed: raw.hideClosed ?? true,
+      frontendOnly: raw.frontendOnly ?? false,
+    }
+  } catch {
+    return {
+      filter: EFilterKey.All,
+      hideClosed: true,
+      frontendOnly: false,
+    }
   }
 }
 
@@ -42,6 +70,7 @@ type ReportState = {
   query: string
   hideClosed: boolean
   frontendOnly: boolean
+  showSetup: boolean
   doneMap: Record<string, boolean>
   progressStage: ProgressStage | null
   progressMessage: string
@@ -60,6 +89,8 @@ const EMPTY_COUNTS: FilterCounts = {
   [EFilterKey.Interview]: 0,
   [EFilterKey.Test]: 0,
   [EFilterKey.Invites]: 0,
+  [EFilterKey.Wait]: 0,
+  [EFilterKey.Bot]: 0,
   [EFilterKey.Closed]: 0,
 }
 
@@ -69,14 +100,16 @@ const MAX_LOGS = 120
  * Состояние отчёта: sync/upload, фильтры очередей, локальные «сделано».
  */
 export function useReport() {
+  const prefs = loadPrefs()
   const state = reactive<ReportState>({
     report: null,
     loading: false,
     error: '',
-    filter: EFilterKey.All,
+    filter: prefs.filter,
     query: '',
-    hideClosed: true,
-    frontendOnly: false,
+    hideClosed: prefs.hideClosed,
+    frontendOnly: prefs.frontendOnly,
+    showSetup: false,
     doneMap: loadDoneMap(),
     progressStage: null,
     progressMessage: '',
@@ -87,6 +120,17 @@ export function useReport() {
   })
 
   let logSeq = 0
+  let abortController: AbortController | null = null
+
+  watch(
+    () => [state.filter, state.hideClosed, state.frontendOnly] as const,
+    ([filter, hideClosed, frontendOnly]) => {
+      localStorage.setItem(
+        PREFS_STORAGE_KEY,
+        JSON.stringify({ filter, hideClosed, frontendOnly } satisfies Prefs),
+      )
+    },
+  )
 
   const meta = computed(() => state.report?.meta ?? null)
 
@@ -112,6 +156,8 @@ export function useReport() {
       [EFilterKey.Interview]: leads.interview.length,
       [EFilterKey.Test]: leads.tests.length,
       [EFilterKey.Invites]: leads.invites.length,
+      [EFilterKey.Wait]: leads.wait?.length ?? 0,
+      [EFilterKey.Bot]: leads.bot?.length ?? 0,
       [EFilterKey.Closed]: leads.closed.length,
     }
   })
@@ -129,6 +175,8 @@ export function useReport() {
       [EFilterKey.Interview]: leads.interview,
       [EFilterKey.Test]: leads.tests,
       [EFilterKey.Invites]: leads.invites,
+      [EFilterKey.Wait]: leads.wait ?? [],
+      [EFilterKey.Bot]: leads.bot ?? [],
       [EFilterKey.Closed]: leads.closed,
     }
 
@@ -221,6 +269,21 @@ export function useReport() {
   }
 
   /**
+   * Удаляет из doneMap id, которых нет в текущем отчёте.
+   */
+  function pruneDoneMap(report: Report): void {
+    const ids = new Set(report.leads.all.map((lead) => lead.id))
+    const next: Record<string, boolean> = {}
+    for (const [id, value] of Object.entries(state.doneMap)) {
+      if (ids.has(id) && value) {
+        next[id] = true
+      }
+    }
+    state.doneMap = next
+    localStorage.setItem(DONE_STORAGE_KEY, JSON.stringify(state.doneMap))
+  }
+
+  /**
    * Сохраняет чекбокс «сделано» в localStorage.
    */
   function setDone(id: string, value: boolean): void {
@@ -238,7 +301,11 @@ export function useReport() {
     state.progressMode = 'boot'
     state.progressMessage = 'Проверяю сохранённую сессию…'
     try {
-      state.report = await fetchReport()
+      const report = await fetchReport()
+      state.report = report
+      if (report) {
+        pruneDoneMap(report)
+      }
     } catch (err) {
       state.error = err instanceof Error ? err.message : String(err)
     } finally {
@@ -252,20 +319,31 @@ export function useReport() {
     state.loading = true
     state.error = ''
     resetProgress('sync')
+    ensureSessionId()
+    abortController = new AbortController()
     try {
-      state.report = await syncReportStream(
+      const report = await syncReportStream(
         {
           cookie,
           days,
           hhHost: hhHost || undefined,
         },
         handleProgressEvent,
+        abortController.signal,
       )
+      state.report = report
+      pruneDoneMap(report)
+      state.showSetup = false
     } catch (err) {
-      state.error = err instanceof Error ? err.message : String(err)
+      if (abortController?.signal.aborted) {
+        state.error = 'Синхронизация остановлена'
+      } else {
+        state.error = err instanceof Error ? err.message : String(err)
+      }
       throw err
     } finally {
       state.loading = false
+      abortController = null
     }
   }
 
@@ -273,20 +351,65 @@ export function useReport() {
     state.loading = true
     state.error = ''
     resetProgress('upload')
+    ensureSessionId()
+    abortController = new AbortController()
     try {
-      state.report = await uploadReportStream(file, handleProgressEvent)
+      const report = await uploadReportStream(file, handleProgressEvent, abortController.signal)
+      state.report = report
+      pruneDoneMap(report)
+      state.showSetup = false
     } catch (err) {
-      state.error = err instanceof Error ? err.message : String(err)
+      if (abortController?.signal.aborted) {
+        state.error = 'Загрузка остановлена'
+      } else {
+        state.error = err instanceof Error ? err.message : String(err)
+      }
       throw err
     } finally {
       state.loading = false
+      abortController = null
     }
+  }
+
+  async function cancelJob(): Promise<void> {
+    abortController?.abort()
+    await cancelSync()
+    state.progressMessage = 'Останавливаю…'
+  }
+
+  /**
+   * Скачивает текущий отчёт как JSON.
+   */
+  function exportReport(): void {
+    if (!state.report) {
+      return
+    }
+    const blob = new Blob([JSON.stringify(state.report, null, 2)], {
+      type: 'application/json',
+    })
+    const url = URL.createObjectURL(blob)
+    const stamp = state.report.meta.exportedAt.replace(/[^\d]/g, '').slice(0, 12) || 'report'
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `hh-leads-${stamp}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function openSetup(): void {
+    state.showSetup = true
+    state.error = ''
+  }
+
+  function closeSetup(): void {
+    state.showSetup = false
   }
 
   async function reset(): Promise<void> {
     await clearServerSession()
     state.report = null
     state.error = ''
+    state.showSetup = false
     state.progressMode = null
     state.progressLogs = []
     state.progressMessage = ''
@@ -304,6 +427,10 @@ export function useReport() {
     bootstrap,
     runSync,
     runUpload,
+    cancelJob,
+    exportReport,
+    openSetup,
+    closeSetup,
     reset,
   }
 }

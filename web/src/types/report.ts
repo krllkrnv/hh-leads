@@ -4,6 +4,9 @@ export type LeadTag =
   | 'interview'
   | 'test'
   | 'invite'
+  | 'wait'
+  | 'bot'
+  | 'discuss'
   | 'closed'
 
 export type Lead = {
@@ -29,6 +32,7 @@ export type Lead = {
 
 export type ReportMeta = {
   period: string
+  periodFrom?: string | null
   days: number
   exportedAt: string
   source: string
@@ -63,6 +67,8 @@ export type Report = {
     contact: Lead[]
     tests: Lead[]
     invites: Lead[]
+    wait?: Lead[]
+    bot?: Lead[]
     closed: Lead[]
   }
   records?: Lead[]
@@ -75,6 +81,8 @@ export enum EFilterKey {
   Interview = 'interview',
   Test = 'test',
   Invites = 'invites',
+  Wait = 'wait',
+  Bot = 'bot',
   Closed = 'closed',
 }
 
@@ -105,6 +113,8 @@ export const FILTER_LABELS: Record<FilterKey, string> = {
   [EFilterKey.Interview]: 'Собес',
   [EFilterKey.Test]: 'Тесты',
   [EFilterKey.Invites]: 'Приглашения',
+  [EFilterKey.Wait]: 'Ждём',
+  [EFilterKey.Bot]: 'Бот',
   [EFilterKey.Closed]: 'Закрытые',
 }
 
@@ -114,9 +124,13 @@ export const LEAD_TAG_LABELS: Record<LeadTag, string> = {
   interview: 'собес',
   test: 'тест',
   invite: 'приглашение',
+  wait: 'ждём',
+  bot: 'бот',
+  discuss: 'обсуждение',
   closed: 'закрыто',
 }
 
 export const DEFAULT_SYNC_DAYS = 60
 export const DONE_STORAGE_KEY = 'hh-leads-done'
+export const PREFS_STORAGE_KEY = 'hh-leads-prefs'
 export const SESSION_STORAGE_KEY = 'hh-leads-session-id'
