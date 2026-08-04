@@ -373,17 +373,26 @@ def detect_action(
         return "Отказ / закрыто", f"статус {state_id}; последний: {author}", last_from
 
     if last_from == "работодатель":
-        snippet = re.sub(r"\s+", " ", last_text)[:120]
-        return "Ответить работодателю", f"последнее от HR: {snippet}", last_from
+        snippet = _clip_snippet(last_text)
+        return "Ответить работодателю", snippet or "ждёт ответа", last_from
 
     if last_from == "бот":
-        snippet = re.sub(r"\s+", " ", last_text)[:120]
-        return "Автоответ / бот", f"бот: {snippet}", last_from
+        snippet = _clip_snippet(last_text)
+        detail = f"автоответ · {snippet}" if snippet else "автоответ"
+        return "Автоответ / бот", detail, last_from
 
     if last_from == "я":
-        return "Ждать ответа HR", f"последнее от тебя · {author}", last_from
+        return "Ждать ответа HR", "ждём ответа HR", last_from
 
     return "Без действия", "", last_from
+
+
+def _clip_snippet(text: str, limit: int = 140) -> str:
+    """Короткий читаемый фрагмент без служебных префиксов."""
+    cleaned = re.sub(r"\s+", " ", text).strip()
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: limit - 1].rstrip(" ,.;:") + "…"
 
 
 def build_summary(messages: list[dict[str, Any]], limit: int = 5, max_len: int = 200) -> str:

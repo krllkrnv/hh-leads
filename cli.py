@@ -61,7 +61,7 @@ def analyze(cookie: str, days: int, out_path: Path, delay: float, hh_host: str |
         days,
         delay=delay,
         hh_host=hh_host,
-        on_progress=lambda msg: print(msg, flush=True),
+        on_progress=lambda event: print(event.get("message", event), flush=True),
     )
     write_excel(records, out_path, days, since)
     print(f"Готово: {out_path}")

@@ -3,13 +3,29 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable
+from typing import Any
 
 from classify import ChatRecord, classify, extract_messages, extract_meta
 from hh_client import ChatikClient
+from progress import ProgressCb, emit
 
 
-ProgressCb = Callable[[str], None]
+def _company_label(entry: dict[str, Any]) -> str:
+    display = entry.get("display") or {}
+    chat = entry.get("chat") or {}
+    for key in ("title", "name", "employerName", "companyName"):
+        value = display.get(key) or chat.get(key)
+        if value:
+            return str(value)
+    participants = display.get("participants") or chat.get("participants") or []
+    if isinstance(participants, list):
+        for person in participants:
+            if not isinstance(person, dict):
+                continue
+            name = person.get("name") or person.get("displayName")
+            if name:
+                return str(name)
+    return "чат"
 
 
 def fetch_records(
@@ -21,29 +37,68 @@ def fetch_records(
     on_progress: ProgressCb | None = None,
 ) -> tuple[list[ChatRecord], datetime]:
     since = datetime.now(timezone.utc) - timedelta(days=days)
-    log = on_progress or (lambda _msg: None)
 
-    log(f"Загружаю чаты с {since.isoformat()} …")
+    emit(on_progress, "start", f"Старт синхронизации за последние {days} дн.")
+    emit(on_progress, "auth", "Проверяю cookie и подключаюсь к Chatik…")
+
     with ChatikClient(cookie, delay=delay, hh_host=hh_host) as client:
         applicant_id = client.get_applicant_id()
         if applicant_id:
-            log(f"applicantId: {applicant_id}")
+            emit(on_progress, "auth", "Сессия принята, профиль найден")
         else:
-            log("applicantId не определён — определение «я/HR» может быть неточным")
+            emit(
+                on_progress,
+                "warn",
+                "Профиль не определён — разметка «я / HR» может быть грубее",
+            )
 
-        chat_entries = client.iter_chats(since)
-        log(f"Найдено чатов в окне: {len(chat_entries)}")
+        emit(on_progress, "list", "Собираю список чатов за период…")
+
+        def on_page(page: int, collected: int) -> None:
+            emit(
+                on_progress,
+                "list",
+                f"Страница {page + 1}: уже {collected} чатов в выборке",
+                current=collected,
+            )
+
+        chat_entries = client.iter_chats(since, on_page=on_page)
+        total = len(chat_entries)
+        emit(
+            on_progress,
+            "list",
+            f"В окне {days} дн. найдено чатов: {total}",
+            current=total,
+            total=total,
+        )
+
         records: list[ChatRecord] = []
         for idx, entry in enumerate(chat_entries, start=1):
             chat = entry["chat"]
             chat_id = str(chat.get("id") or "")
-            log(f"[{idx}/{len(chat_entries)}] сообщения для {chat_id} …")
+            company = _company_label(entry)
+            emit(
+                on_progress,
+                "fetch",
+                f"Читаю переписку: {company}",
+                current=idx,
+                total=total,
+                company=company,
+                detail=chat_id,
+            )
             chat_data: dict[str, Any] = {}
             try:
                 if chat_id:
                     chat_data = client.get_chat_data(chat_id)
             except Exception as exc:  # noqa: BLE001
-                log(f"  предупреждение: не удалось загрузить сообщения: {exc}")
+                emit(
+                    on_progress,
+                    "warn",
+                    f"Не удалось загрузить сообщения ({company}): {exc}",
+                    current=idx,
+                    total=total,
+                    company=company,
+                )
             messages = extract_messages(chat_data) if chat_data else []
             if not messages and chat.get("lastMessage"):
                 lm = chat["lastMessage"]
@@ -64,6 +119,14 @@ def fetch_records(
                         "workflow_state": None,
                     }
                 ]
+            emit(
+                on_progress,
+                "classify",
+                f"Классифицирую: {company}",
+                current=idx,
+                total=total,
+                company=company,
+            )
             meta = extract_meta(
                 chat,
                 entry.get("display") or {},
@@ -72,4 +135,6 @@ def fetch_records(
                 client=client,
             )
             records.append(classify(meta, messages))
+
+    emit(on_progress, "build", f"Собираю отчёт по {len(records)} чатам…")
     return records, since

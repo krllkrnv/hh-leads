@@ -1,4 +1,5 @@
 import type { Report } from '@/types/report'
+import type { ProgressEvent } from '@/types/progress'
 import { SESSION_STORAGE_KEY } from '@/types/report'
 
 /**
@@ -45,6 +46,83 @@ async function readError(res: Response): Promise<string> {
 }
 
 /**
+ * Читает NDJSON-стрим и вызывает onEvent на каждое событие.
+ */
+async function readNdjsonStream(
+  res: Response,
+  onEvent: (event: ProgressEvent) => void,
+): Promise<Report> {
+  if (!res.ok || !res.body) {
+    throw new Error(await readError(res))
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let report: Report | null = null
+  let streamError: string | null = null
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) {
+      break
+    }
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed) {
+        continue
+      }
+      let event: ProgressEvent
+      try {
+        event = JSON.parse(trimmed) as ProgressEvent
+      } catch {
+        continue
+      }
+      if (event.sessionId) {
+        setSessionId(event.sessionId)
+      }
+      onEvent(event)
+      if (event.type === 'done' && event.report) {
+        report = event.report
+      }
+      if (event.type === 'error') {
+        streamError = event.message || 'Ошибка синхронизации'
+      }
+    }
+  }
+
+  if (buffer.trim()) {
+    try {
+      const event = JSON.parse(buffer.trim()) as ProgressEvent
+      if (event.sessionId) {
+        setSessionId(event.sessionId)
+      }
+      onEvent(event)
+      if (event.type === 'done' && event.report) {
+        report = event.report
+      }
+      if (event.type === 'error') {
+        streamError = event.message || 'Ошибка синхронизации'
+      }
+    } catch {
+      /* ignore trailing junk */
+    }
+  }
+
+  if (streamError) {
+    throw new Error(streamError)
+  }
+  if (!report) {
+    throw new Error('Стрим завершился без отчёта')
+  }
+  return report
+}
+
+/**
  * Загружает текущий отчёт сессии. Без session id возвращает null.
  */
 export async function fetchReport(): Promise<Report | null> {
@@ -75,47 +153,35 @@ type SyncPayload = {
 }
 
 /**
- * Синхронизирует чаты через Chatik API.
- * @param payload - cookie, период и опциональный host
+ * Синхронизирует чаты со стримом прогресса.
  */
-export async function syncReport(payload: SyncPayload): Promise<Report> {
-  const res = await fetch('/api/sync', {
+export async function syncReportStream(
+  payload: SyncPayload,
+  onEvent: (event: ProgressEvent) => void,
+): Promise<Report> {
+  const res = await fetch('/api/sync/stream', {
     method: 'POST',
     headers: headers({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(payload),
   })
-  if (!res.ok) {
-    throw new Error(await readError(res))
-  }
-
-  const data: { sessionId?: string; report: Report } = await res.json()
-  if (data.sessionId) {
-    setSessionId(data.sessionId)
-  }
-  return data.report
+  return readNdjsonStream(res, onEvent)
 }
 
 /**
- * Загружает xlsx/json отчёт на сервер.
- * @param file - файл выгрузки
+ * Загружает файл со стримом прогресса.
  */
-export async function uploadReport(file: File): Promise<Report> {
+export async function uploadReportStream(
+  file: File,
+  onEvent: (event: ProgressEvent) => void,
+): Promise<Report> {
   const form = new FormData()
   form.append('file', file)
-  const res = await fetch('/api/upload', {
+  const res = await fetch('/api/upload/stream', {
     method: 'POST',
     headers: headers(),
     body: form,
   })
-  if (!res.ok) {
-    throw new Error(await readError(res))
-  }
-
-  const data: { sessionId?: string; report: Report } = await res.json()
-  if (data.sessionId) {
-    setSessionId(data.sessionId)
-  }
-  return data.report
+  return readNdjsonStream(res, onEvent)
 }
 
 /**

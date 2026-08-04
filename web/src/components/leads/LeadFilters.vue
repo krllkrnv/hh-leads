@@ -13,6 +13,7 @@ defineProps<{
   filter: FilterKey
   query: string
   hideClosed: boolean
+  frontendOnly: boolean
   counts: Record<FilterKey, number>
   visibleCount: number
 }>()
@@ -21,6 +22,7 @@ const emit = defineEmits<{
   'update:filter': [value: FilterKey]
   'update:query': [value: string]
   'update:hideClosed': [value: boolean]
+  'update:frontendOnly': [value: boolean]
 }>()
 
 const FILTER_ORDER: FilterKey[] = [
@@ -54,6 +56,14 @@ function onHideClosed(event: Event): void {
   const target = event.target as HTMLInputElement
   emit('update:hideClosed', target.checked)
 }
+
+/**
+ * Переключает фильтр frontend-вакансий.
+ */
+function onFrontendOnly(event: Event): void {
+  const target = event.target as HTMLInputElement
+  emit('update:frontendOnly', target.checked)
+}
 </script>
 
 <template>
@@ -79,15 +89,26 @@ function onHideClosed(event: Event): void {
         placeholder="Компания, вакансия, фрагмент…"
         @update:model-value="onQuery"
       />
-      <label :class="$style.check">
-        <input
-          :class="$style.checkbox"
-          type="checkbox"
-          :checked="hideClosed"
-          @change="onHideClosed"
-        />
-        <span :class="$style.checkLabel">Скрыть закрытые</span>
-      </label>
+      <div :class="$style.toggles">
+        <label :class="$style.check">
+          <input
+            :class="$style.checkbox"
+            type="checkbox"
+            :checked="hideClosed"
+            @change="onHideClosed"
+          />
+          <span :class="$style.checkLabel">Скрыть закрытые</span>
+        </label>
+        <label :class="$style.check">
+          <input
+            :class="$style.checkbox"
+            type="checkbox"
+            :checked="frontendOnly"
+            @change="onFrontendOnly"
+          />
+          <span :class="$style.checkLabel">Только frontend</span>
+        </label>
+      </div>
       <span :class="$style.visible">
         показано
         <span :class="$style.visibleNum">{{ visibleCount }}</span>
@@ -175,6 +196,13 @@ function onHideClosed(event: Event): void {
   @include respond-to(from-desktop) {
     grid-template-columns: 1fr auto auto;
   }
+}
+
+.toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  align-items: center;
 }
 
 .check {

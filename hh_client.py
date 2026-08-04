@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import time
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import unquote
 
 import httpx
@@ -193,7 +193,11 @@ class ChatikClient:
         self._applicant_id = ""
         return None
 
-    def iter_chats(self, since: datetime) -> list[dict[str, Any]]:
+    def iter_chats(
+        self,
+        since: datetime,
+        on_page: Callable[[int, int], None] | None = None,
+    ) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
         page = 0
         while True:
@@ -229,6 +233,9 @@ class ChatikClient:
                         "list_resources": resources,
                     }
                 )
+
+            if on_page is not None:
+                on_page(page, len(items))
 
             pages = chats_block.get("pages")
             if stop:

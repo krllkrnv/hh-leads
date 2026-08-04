@@ -3,19 +3,22 @@
 from __future__ import annotations
 
 import json
+import queue
 import secrets
 import tempfile
+import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from hh_client import HhApiError, HhAuthError
 from pipeline import fetch_records
+from progress import ProgressEvent, emit
 from report import build_report, records_from_excel
 
 ROOT = Path(__file__).resolve().parent
@@ -52,6 +55,33 @@ def _session_id(x_session_id: str | None) -> str:
     return secrets.token_urlsafe(16)
 
 
+def _ndjson_line(payload: dict[str, Any]) -> str:
+    return json.dumps(payload, ensure_ascii=False) + "\n"
+
+
+def _stream_job(worker: Any) -> Iterator[str]:
+    """Запускает worker(put_event) в потоке и стримит NDJSON из очереди."""
+    events: queue.Queue[dict[str, Any] | None] = queue.Queue()
+
+    def put_event(payload: dict[str, Any]) -> None:
+        events.put(payload)
+
+    def run() -> None:
+        try:
+            worker(put_event)
+        except Exception as exc:  # noqa: BLE001
+            put_event({"type": "error", "message": str(exc)})
+        finally:
+            events.put(None)
+
+    threading.Thread(target=run, daemon=True).start()
+    while True:
+        item = events.get()
+        if item is None:
+            break
+        yield _ndjson_line(item)
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -77,6 +107,53 @@ def sync(body: SyncBody, x_session_id: str | None = Header(default=None)) -> dic
     report = build_report(records, days=body.days, since=since, source="sync")
     _SESSIONS[sid] = report
     return {"sessionId": sid, "report": report}
+
+
+@app.post("/api/sync/stream")
+def sync_stream(
+    body: SyncBody,
+    x_session_id: str | None = Header(default=None),
+) -> StreamingResponse:
+    sid = _session_id(x_session_id)
+
+    def worker(put_event: Any) -> None:
+        def on_progress(event: ProgressEvent) -> None:
+            put_event({"type": "progress", "sessionId": sid, **event})
+
+        try:
+            records, since = fetch_records(
+                body.cookie,
+                body.days,
+                delay=body.delay,
+                hh_host=body.hhHost,
+                on_progress=on_progress,
+            )
+            report = build_report(records, days=body.days, since=since, source="sync")
+            _SESSIONS[sid] = report
+            emit(on_progress, "done", "Готово")
+            put_event({"type": "done", "sessionId": sid, "report": report})
+        except HhAuthError as exc:
+            put_event({"type": "error", "sessionId": sid, "message": str(exc), "status": 401})
+        except HhApiError as exc:
+            put_event({"type": "error", "sessionId": sid, "message": str(exc), "status": 502})
+        except Exception as exc:  # noqa: BLE001
+            put_event(
+                {
+                    "type": "error",
+                    "sessionId": sid,
+                    "message": f"Sync failed: {exc}",
+                    "status": 500,
+                }
+            )
+
+    return StreamingResponse(
+        _stream_job(worker),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.post("/api/upload")
@@ -123,6 +200,102 @@ async def upload(
 
     _SESSIONS[sid] = report
     return {"sessionId": sid, "report": report}
+
+
+@app.post("/api/upload/stream")
+async def upload_stream(
+    file: UploadFile = File(...),
+    x_session_id: str | None = Header(default=None),
+) -> StreamingResponse:
+    sid = _session_id(x_session_id)
+    name = (file.filename or "upload").lower()
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Пустой файл")
+
+    def worker(put_event: Any) -> None:
+        def on_progress(event: ProgressEvent) -> None:
+            put_event({"type": "progress", "sessionId": sid, **event})
+
+        try:
+            emit(on_progress, "start", f"Принял файл {file.filename or name}")
+            emit(on_progress, "parse", "Читаю содержимое…")
+
+            if name.endswith(".json"):
+                emit(on_progress, "parse", "Разбираю JSON-отчёт…")
+                data = json.loads(raw.decode("utf-8"))
+                if not (isinstance(data, dict) and "meta" in data and "leads" in data):
+                    put_event(
+                        {
+                            "type": "error",
+                            "sessionId": sid,
+                            "message": "JSON должен быть отчётом дашборда (meta + leads)",
+                            "status": 400,
+                        }
+                    )
+                    return
+                report = data
+                emit(on_progress, "build", "Подключаю готовый отчёт…")
+            elif name.endswith(".xlsx"):
+                emit(on_progress, "parse", "Разбираю Excel…")
+                with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+                    tmp.write(raw)
+                    tmp_path = Path(tmp.name)
+                try:
+                    records, days = records_from_excel(tmp_path)
+                finally:
+                    tmp_path.unlink(missing_ok=True)
+                if not records:
+                    put_event(
+                        {
+                            "type": "error",
+                            "sessionId": sid,
+                            "message": "В Excel не найдено чатов.",
+                            "status": 400,
+                        }
+                    )
+                    return
+                emit(
+                    on_progress,
+                    "classify",
+                    f"Собрано записей из файла: {len(records)}",
+                    current=len(records),
+                    total=len(records),
+                )
+                emit(on_progress, "build", "Собираю отчёт для дашборда…")
+                report = build_report(records, days=days, source="upload")
+            else:
+                put_event(
+                    {
+                        "type": "error",
+                        "sessionId": sid,
+                        "message": "Поддерживаются .xlsx и .json",
+                        "status": 400,
+                    }
+                )
+                return
+
+            _SESSIONS[sid] = report
+            emit(on_progress, "done", "Готово")
+            put_event({"type": "done", "sessionId": sid, "report": report})
+        except Exception as exc:  # noqa: BLE001
+            put_event(
+                {
+                    "type": "error",
+                    "sessionId": sid,
+                    "message": f"Не удалось разобрать файл: {exc}",
+                    "status": 400,
+                }
+            )
+
+    return StreamingResponse(
+        _stream_job(worker),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/api/report")

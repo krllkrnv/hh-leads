@@ -10,6 +10,7 @@ import SetupPanel from '@/components/leads/SetupPanel.vue'
 import LeadFilters from '@/components/leads/LeadFilters.vue'
 import LeadsTable from '@/components/leads/LeadsTable.vue'
 import SummaryCharts from '@/components/leads/SummaryCharts.vue'
+import LiveProgressPanel from '@/components/leads/LiveProgressPanel.vue'
 import { useReport } from '@/composables/useReport'
 
 const {
@@ -17,6 +18,7 @@ const {
   meta,
   filterCounts,
   visibleLeads,
+  progressPercent,
   setDone,
   isDone,
   bootstrap,
@@ -85,11 +87,13 @@ async function onReset(): Promise<void> {
         :filter="state.filter"
         :query="state.query"
         :hide-closed="state.hideClosed"
+        :frontend-only="state.frontendOnly"
         :counts="filterCounts"
         :visible-count="visibleLeads.length"
         @update:filter="onFilter"
         @update:query="state.query = $event"
         @update:hide-closed="state.hideClosed = $event"
+        @update:frontend-only="state.frontendOnly = $event"
       />
 
       <LeadsTable
@@ -99,14 +103,17 @@ async function onReset(): Promise<void> {
       />
     </template>
 
-    <div
-      v-if="state.loading"
-      :class="$style.status"
-      role="status"
-      aria-live="polite"
-    >
-      Загрузка данных…
-    </div>
+    <LiveProgressPanel
+      :active="state.loading"
+      :mode="state.progressMode"
+      :stage="state.progressStage"
+      :message="state.progressMessage"
+      :current="state.progressCurrent"
+      :total="state.progressTotal"
+      :percent="progressPercent"
+      :logs="state.progressLogs"
+    />
+
     <p v-if="state.error" :class="$style.error" role="alert">
       {{ state.error }}
     </p>
@@ -124,12 +131,6 @@ async function onReset(): Promise<void> {
   flex-direction: column;
   gap: var(--space-2);
   min-height: 100dvh;
-}
-
-.status {
-  margin: var(--space-3) 0 0;
-  @include text(mono);
-  color: var(--color-muted);
 }
 
 .error {

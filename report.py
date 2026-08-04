@@ -94,9 +94,16 @@ def lead_tag(rec: ChatRecord) -> str:
     return "invite"
 
 
+def clean_why(text: str) -> str:
+    """Убирает служебные префиксы классификатора из колонки «суть»."""
+    why = re.sub(r"\s+", " ", text).strip()
+    why = re.sub(r"^(?:последнее от HR|бот|последнее от тебя)\s*[:·]\s*", "", why, flags=re.I)
+    return why[:160].rstrip(" ,.;:") or "—"
+
+
 def record_to_lead(rec: ChatRecord) -> dict[str, Any]:
     why = rec.action_detail or "; ".join(rec.invite_reasons[:2] or rec.test_reasons[:2]) or rec.summary
-    why = re.sub(r"\s+", " ", why).strip()[:160] or "—"
+    why = clean_why(why or "")
     return {
         "id": rec.negotiation_id or chat_id_from_url(rec.chat_url),
         "company": rec.company or "—",
