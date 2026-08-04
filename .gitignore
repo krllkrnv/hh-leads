@@ -1,0 +1,33 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Secrets & local env
+.env
+.env.local
+
+# Exports / locks
+*.xlsx
+.~lock.*
+
+# Frontend
+web/node_modules/
+web/dist/
+
+# Session / uploads
+uploads/
+*.session.json
+session_dumps/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
