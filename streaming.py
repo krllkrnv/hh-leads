@@ -13,7 +13,7 @@ def ndjson_line(payload: dict[str, Any]) -> str:
 
 
 def stream_job(worker: Callable[[Callable[[dict[str, Any]], None]], None]) -> Iterator[str]:
-    """Запускает worker(put_event) в потоке и стримит NDJSON из очереди."""
+    """Запускает worker(put_event) в потоке и стримит NDJSON из буфера событий."""
     events: queue.Queue[dict[str, Any] | None] = queue.Queue()
 
     def put_event(payload: dict[str, Any]) -> None:

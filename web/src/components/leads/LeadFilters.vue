@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Очереди лидов, быстрый поиск и пресеты профиля (стек, грейд, роль).
+ * Вкладки фильтров, быстрый поиск и пресеты профиля (стек, грейд, роль).
  */
 import { ref } from 'vue'
 import type { FilterKey } from '@/types/report'
@@ -43,14 +43,14 @@ const openGroupId = ref<string | null>(null)
 const panelId = 'lead-filters-panel'
 
 /**
- * Переключает, какую очередь лидов сейчас смотрим.
+ * Переключает, какой список лидов сейчас смотрим.
  */
 function handleFilter(key: FilterKey): void {
   emit('update:filter', key)
 }
 
 /**
- * Перемещает фокус между вкладками очередей стрелками, Home и End.
+ * Перемещает фокус между вкладками фильтров стрелками, Home и End.
  */
 function onTabKeydown(event: KeyboardEvent, index: number): void {
   let next: number
@@ -134,7 +134,7 @@ function onPresetKeydown(event: KeyboardEvent): void {
 
 <template>
   <div :class="$style.LeadFilters">
-    <div :class="$style.tabsShell" role="tablist" aria-label="Очереди лидов">
+    <div :class="$style.tabsShell" role="tablist" aria-label="Фильтры лидов">
       <button
         v-for="(key, index) in FILTER_ORDER"
         :id="`lead-tab-${key}`"

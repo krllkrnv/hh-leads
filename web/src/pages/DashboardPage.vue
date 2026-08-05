@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Главная страница: сначала экран загрузки, потом дашборд с очередями лидов.
+ * Главная страница: сначала экран загрузки, потом дашборд со списком лидов.
  */
 import { nextTick, onMounted, watch } from 'vue'
 import type { FilterKey } from '@/types/report'
@@ -73,7 +73,7 @@ async function onUpload(file: File): Promise<void> {
 }
 
 /**
- * Переключает активную очередь лидов на вкладке.
+ * Переключает активный фильтр лидов на вкладке.
  */
 function onFilter(value: FilterKey): void {
   state.filter = value

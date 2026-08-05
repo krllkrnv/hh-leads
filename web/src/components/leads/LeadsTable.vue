@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Очередь лидов. Клик по строке открывает чат на hh в новой вкладке.
+ * Список лидов. Клик по строке открывает чат на hh в новой вкладке.
  */
 import { useCssModule } from 'vue'
 import type { Lead } from '@/types/report'
@@ -69,7 +69,7 @@ function showStatus(status: string): boolean {
 <template>
   <div :class="$style.LeadsTable">
     <p v-if="!leads.length" :class="$style.empty">
-      В этой очереди пока пусто. Попробуйте другую вкладку или ослабьте фильтр по словам в профиле.
+      В этом списке пока пусто. Попробуйте другую вкладку или ослабьте фильтр по словам в профиле.
     </p>
 
     <ul v-else :class="$style.list">
