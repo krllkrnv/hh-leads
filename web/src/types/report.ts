@@ -1,13 +1,5 @@
 export type LeadTag =
-  | 'reply'
-  | 'call'
-  | 'interview'
-  | 'test'
-  | 'invite'
-  | 'wait'
-  | 'bot'
-  | 'discuss'
-  | 'closed'
+  'reply' | 'call' | 'interview' | 'test' | 'invite' | 'wait' | 'bot' | 'discuss' | 'closed'
 
 export type Lead = {
   id: string

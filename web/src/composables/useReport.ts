@@ -20,10 +20,7 @@ import {
 
 function loadDoneMap(): Record<string, boolean> {
   try {
-    return JSON.parse(localStorage.getItem(DONE_STORAGE_KEY) || '{}') as Record<
-      string,
-      boolean
-    >
+    return JSON.parse(localStorage.getItem(DONE_STORAGE_KEY) || '{}') as Record<string, boolean>
   } catch {
     return {}
   }
@@ -128,13 +125,7 @@ export function useReport() {
   let abortController: AbortController | null = null
 
   watch(
-    () =>
-      [
-        state.filter,
-        state.hideClosed,
-        state.includeKeywords,
-        state.excludeKeywords,
-      ] as const,
+    () => [state.filter, state.hideClosed, state.includeKeywords, state.excludeKeywords] as const,
     ([filter, hideClosed, includeKeywords, excludeKeywords]) => {
       localStorage.setItem(
         PREFS_STORAGE_KEY,
@@ -154,10 +145,7 @@ export function useReport() {
     if (!state.progressTotal) {
       return 0
     }
-    return Math.min(
-      100,
-      Math.round((state.progressCurrent / state.progressTotal) * 100),
-    )
+    return Math.min(100, Math.round((state.progressCurrent / state.progressTotal) * 100))
   })
 
   const filterCounts = computed<FilterCounts>(() => {
@@ -201,9 +189,9 @@ export function useReport() {
 
     return list.filter((lead) => {
       if (
-        state.hideClosed
-        && state.filter !== EFilterKey.Closed
-        && (lead.closed || lead.tag === 'closed')
+        state.hideClosed &&
+        state.filter !== EFilterKey.Closed &&
+        (lead.closed || lead.tag === 'closed')
       ) {
         return false
       }

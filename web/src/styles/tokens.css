@@ -1,30 +1,30 @@
 @font-face {
-  font-family: "Manrope";
-  src: url("/fonts/Manrope-400.woff2") format("woff2");
+  font-family: 'Manrope';
+  src: url('/fonts/Manrope-400.woff2') format('woff2');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: "Manrope";
-  src: url("/fonts/Manrope-500.woff2") format("woff2");
+  font-family: 'Manrope';
+  src: url('/fonts/Manrope-500.woff2') format('woff2');
   font-weight: 500;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: "Manrope";
-  src: url("/fonts/Manrope-600.woff2") format("woff2");
+  font-family: 'Manrope';
+  src: url('/fonts/Manrope-600.woff2') format('woff2');
   font-weight: 600;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: "Manrope";
-  src: url("/fonts/Manrope-700.woff2") format("woff2");
+  font-family: 'Manrope';
+  src: url('/fonts/Manrope-700.woff2') format('woff2');
   font-weight: 700;
   font-style: normal;
   font-display: swap;
@@ -69,9 +69,9 @@
   --rail-discuss: #484f55;
   --rail-closed: var(--color-faint);
 
-  --font-display: "Manrope", sans-serif;
-  --font-sans: "Manrope", sans-serif;
-  --font-mono: "Manrope", sans-serif;
+  --font-display: 'Manrope', sans-serif;
+  --font-sans: 'Manrope', sans-serif;
+  --font-mono: 'Manrope', sans-serif;
 
   --radius-sm: 0.25rem;
   --radius: 0.5rem;

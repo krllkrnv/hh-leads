@@ -16,8 +16,8 @@ __pycache__/
 *.xlsx
 .~lock.*
 
-# Frontend
-web/node_modules/
+# Frontend / Node
+node_modules/
 web/dist/
 
 # Session / uploads

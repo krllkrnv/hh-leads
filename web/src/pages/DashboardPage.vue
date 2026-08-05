@@ -38,11 +38,7 @@ onMounted(() => {
 /**
  * Синхронизация по cookie из SetupPanel.
  */
-async function onSync(payload: {
-  cookie: string
-  days: number
-  hhHost: string
-}): Promise<void> {
+async function onSync(payload: { cookie: string; days: number; hhHost: string }): Promise<void> {
   await runSync(payload.cookie, payload.days, payload.hhHost)
 }
 
@@ -107,19 +103,12 @@ async function onReset(): Promise<void> {
           @update:exclude-keywords="state.excludeKeywords = $event"
         />
 
-        <LeadsTable
-          :leads="visibleLeads"
-          :is-done="isDone"
-          @toggle-done="setDone"
-        />
+        <LeadsTable :leads="visibleLeads" :is-done="isDone" @toggle-done="setDone" />
       </div>
     </template>
 
     <LiveProgressPanel
-      :active="
-        state.loading
-          && (state.progressMode === 'sync' || state.progressMode === 'upload')
-      "
+      :active="state.loading && (state.progressMode === 'sync' || state.progressMode === 'upload')"
       :mode="state.progressMode"
       :stage="state.progressStage"
       :message="state.progressMessage"

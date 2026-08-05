@@ -66,10 +66,9 @@ function handlePickFile(): void {
     <header :class="$style.masthead">
       <BrandTitle />
       <p :class="$style.lead">
-        Анализ переписок с работодателями на hh.ru. Здесь собраны приглашения
-        на собеседование, тестовые задания и активные обсуждения. Чаты
-        забираются по cookie из браузера. Если отчёт уже есть в Excel, файл
-        можно открыть без cookie.
+        Анализ переписок с работодателями на hh.ru. Здесь собраны приглашения на собеседование,
+        тестовые задания и активные обсуждения. Чаты забираются по cookie из браузера. Если отчёт
+        уже есть в Excel, файл можно открыть без cookie.
       </p>
       <div :class="$style.accentLine" aria-hidden="true" />
     </header>
@@ -93,8 +92,8 @@ function handlePickFile(): void {
               Открой вкладку
               <span :class="$style.code">Network</span>
               (Сеть) и нажми
-              <span :class="$style.code">Ctrl+R</span>,
-              чтобы страница перезагрузилась и в списке появились запросы.
+              <span :class="$style.code">Ctrl+R</span>, чтобы страница перезагрузилась и в списке
+              появились запросы.
             </li>
             <li>Кликни любой запрос к hh.ru в списке.</li>
             <li>
@@ -103,8 +102,8 @@ function handlePickFile(): void {
               и скопируй её значение целиком.
             </li>
             <li>
-              Вставь сюда. Формат не важен: подойдёт и строка Cookie, и таблица
-              из Application → Cookies — разберём сами. Нужны
+              Вставь сюда. Формат не важен: подойдёт и строка Cookie, и таблица из Application →
+              Cookies — разберём сами. Нужны
               <span :class="$style.code">hhtoken</span>
               и
               <span :class="$style.code">_xsrf</span>.
@@ -159,9 +158,7 @@ function handlePickFile(): void {
       <aside :class="$style.uploadPane">
         <p :class="$style.kicker">Без cookie</p>
         <h2 :class="$style.sectionTitle">Файл отчёта</h2>
-        <p :class="$style.hint">
-          Excel из CLI или JSON, сохранённый из дашборда.
-        </p>
+        <p :class="$style.hint">Excel из CLI или JSON, сохранённый из дашборда.</p>
 
         <input
           ref="fileInput"

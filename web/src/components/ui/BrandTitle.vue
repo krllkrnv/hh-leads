@@ -15,10 +15,7 @@ withDefaults(
 </script>
 
 <template>
-  <component
-    :is="tag"
-    :class="[$style.BrandTitle, $style[`_${size}`]]"
-  >
+  <component :is="tag" :class="[$style.BrandTitle, $style[`_${size}`]]">
     <span :class="$style.hh">HH</span><span :class="$style.rest">Leads</span>
   </component>
 </template>

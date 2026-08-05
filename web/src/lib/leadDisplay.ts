@@ -1,7 +1,6 @@
 import type { Lead } from '@/types/report'
 
-const WHY_PREFIX =
-  /^(?:последнее от HR|бот|последнее от тебя|автоответ)\s*[:·]\s*/i
+const WHY_PREFIX = /^(?:последнее от HR|бот|последнее от тебя|автоответ)\s*[:·]\s*/i
 
 /**
  * Читаемый фрагмент «сути» без служебных префиксов.
@@ -20,9 +19,7 @@ export function displayUpdated(raw: string): string {
     return '—'
   }
 
-  const match = value.match(
-    /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/,
-  )
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/)
   if (!match) {
     return value
   }
@@ -65,11 +62,7 @@ function leadHaystack(lead: Lead): string {
 /**
  * Лид проходит фильтр профиля: все include есть, ни одного exclude нет.
  */
-export function matchesProfile(
-  lead: Lead,
-  includeRaw: string,
-  excludeRaw: string,
-): boolean {
+export function matchesProfile(lead: Lead, includeRaw: string, excludeRaw: string): boolean {
   const hay = leadHaystack(lead)
   const include = parseKeywords(includeRaw)
   const exclude = parseKeywords(excludeRaw)

@@ -40,9 +40,7 @@ const title = computed(() => {
 
 const visibleStages = computed(() => {
   if (props.mode === 'upload') {
-    return PROGRESS_STAGES.filter((item) =>
-      ['parse', 'classify', 'build'].includes(item.id),
-    )
+    return PROGRESS_STAGES.filter((item) => ['parse', 'classify', 'build'].includes(item.id))
   }
   return PROGRESS_STAGES.filter((item) =>
     ['auth', 'list', 'fetch', 'classify', 'build'].includes(item.id),
@@ -149,10 +147,7 @@ watch(
             <li
               v-for="item in visibleStages"
               :key="item.id"
-              :class="[
-                $style.stage,
-                $style[`_${stageStatus(item.id)}`],
-              ]"
+              :class="[$style.stage, $style[`_${stageStatus(item.id)}`]]"
             >
               <span :class="$style.stageDot" />
               <span :class="$style.stageLabel">{{ item.label }}</span>

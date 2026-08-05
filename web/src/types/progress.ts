@@ -1,14 +1,5 @@
 export type ProgressStage =
-  | 'start'
-  | 'auth'
-  | 'list'
-  | 'fetch'
-  | 'classify'
-  | 'parse'
-  | 'build'
-  | 'done'
-  | 'error'
-  | 'warn'
+  'start' | 'auth' | 'list' | 'fetch' | 'classify' | 'parse' | 'build' | 'done' | 'error' | 'warn'
 
 export type ProgressEvent = {
   type?: 'progress' | 'done' | 'error'

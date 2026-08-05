@@ -4,10 +4,7 @@
  */
 import { ref } from 'vue'
 import type { FilterKey } from '@/types/report'
-import {
-  EFilterKey,
-  FILTER_LABELS,
-} from '@/types/report'
+import { EFilterKey, FILTER_LABELS } from '@/types/report'
 import type { ProfilePreset } from '@/lib/profilePresets'
 import { PROFILE_GROUPS } from '@/lib/profilePresets'
 import UiTextInput from '@/components/ui/UiTextInput.vue'
@@ -131,13 +128,7 @@ function clearProfile(): void {
       <div :class="$style.presetsBlock">
         <div :class="$style.presetsHead">
           <span :class="$style.fieldLabel">Пресеты</span>
-          <button
-            type="button"
-            :class="$style.clearBtn"
-            @click="clearProfile"
-          >
-            Сбросить
-          </button>
+          <button type="button" :class="$style.clearBtn" @click="clearProfile">Сбросить</button>
         </div>
 
         <div :class="$style.groups" @mouseleave="closeGroup">
@@ -157,21 +148,18 @@ function clearProfile(): void {
               <span :class="$style.groupCount">{{ group.presets.length }}</span>
             </button>
 
-            <div
-              v-show="openGroupId === group.id"
-              :class="$style.menu"
-              role="menu"
-            >
+            <div v-show="openGroupId === group.id" :class="$style.menu" role="menu">
               <button
                 v-for="preset in group.presets"
                 :key="preset.label"
                 type="button"
                 role="menuitem"
                 :class="$style.menuItem"
-                :title="[
-                  preset.include,
-                  preset.exclude ? `исключить: ${preset.exclude}` : '',
-                ].filter(Boolean).join(' · ')"
+                :title="
+                  [preset.include, preset.exclude ? `исключить: ${preset.exclude}` : '']
+                    .filter(Boolean)
+                    .join(' · ')
+                "
                 @click="applyPreset(preset)"
               >
                 <span :class="$style.menuLabel">{{ preset.label }}</span>

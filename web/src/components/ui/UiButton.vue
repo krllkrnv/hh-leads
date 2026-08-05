@@ -87,7 +87,9 @@ function handleClick(event: MouseEvent): void {
   user-select: none;
   isolation: isolate;
   @include text(button);
-  transition: color var(--dur) var(--ease), opacity var(--dur) var(--ease);
+  transition:
+    color var(--dur) var(--ease),
+    opacity var(--dur) var(--ease);
 
   &::after {
     content: '';
