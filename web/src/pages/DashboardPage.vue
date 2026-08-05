@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Главная страница: setup или дашборд лидов.
+ * Главная: setup или дашборд лидов.
  */
 import { onMounted } from 'vue'
 import type { FilterKey } from '@/types/report'
@@ -81,7 +81,7 @@ async function onReset(): Promise<void> {
 
     <template v-if="state.report && !state.showSetup">
       <TheAppBar
-        subtitle="Очередь лидов из чатов hh.ru"
+        subtitle="Фильтры и список из вашего отчёта"
         show-actions
         :loading="state.loading"
         @refresh="openSetup"
@@ -89,30 +89,37 @@ async function onReset(): Promise<void> {
         @reset="onReset"
       />
 
-      <SummaryCharts v-if="meta" :meta="meta" />
+      <div :class="$style.workspace">
+        <SummaryCharts v-if="meta" :meta="meta" />
 
-      <LeadFilters
-        :filter="state.filter"
-        :query="state.query"
-        :hide-closed="state.hideClosed"
-        :frontend-only="state.frontendOnly"
-        :counts="filterCounts"
-        :visible-count="visibleLeads.length"
-        @update:filter="onFilter"
-        @update:query="state.query = $event"
-        @update:hide-closed="state.hideClosed = $event"
-        @update:frontend-only="state.frontendOnly = $event"
-      />
+        <LeadFilters
+          :filter="state.filter"
+          :query="state.query"
+          :hide-closed="state.hideClosed"
+          :include-keywords="state.includeKeywords"
+          :exclude-keywords="state.excludeKeywords"
+          :counts="filterCounts"
+          :visible-count="visibleLeads.length"
+          @update:filter="onFilter"
+          @update:query="state.query = $event"
+          @update:hide-closed="state.hideClosed = $event"
+          @update:include-keywords="state.includeKeywords = $event"
+          @update:exclude-keywords="state.excludeKeywords = $event"
+        />
 
-      <LeadsTable
-        :leads="visibleLeads"
-        :is-done="isDone"
-        @toggle-done="setDone"
-      />
+        <LeadsTable
+          :leads="visibleLeads"
+          :is-done="isDone"
+          @toggle-done="setDone"
+        />
+      </div>
     </template>
 
     <LiveProgressPanel
-      :active="state.loading"
+      :active="
+        state.loading
+          && (state.progressMode === 'sync' || state.progressMode === 'upload')
+      "
       :mode="state.progressMode"
       :stage="state.progressStage"
       :message="state.progressMessage"
@@ -133,19 +140,26 @@ async function onReset(): Promise<void> {
 
 <style module lang="scss">
 .DashboardPage {
+  position: relative;
   width: min(var(--content-w), calc(100% - 2rem));
   margin: 0 auto;
-  padding: 0 0 var(--space-4);
+  padding: 0 0 var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 0;
   min-height: 100dvh;
+}
+
+.workspace {
+  display: grid;
+  gap: var(--space-5);
+  padding: var(--space-5) 0 var(--space-4);
 }
 
 .error {
   margin: var(--space-3) 0 0;
-  padding: 0.85rem 1rem;
-  border-left: 0.125rem solid var(--color-danger);
+  padding: 0.85rem 1.1rem;
+  border-radius: var(--radius);
   background: var(--color-danger-soft);
   color: var(--color-danger);
   @include text(caption);

@@ -3,12 +3,6 @@ import type { Lead } from '@/types/report'
 const WHY_PREFIX =
   /^(?:последнее от HR|бот|последнее от тебя|автоответ)\s*[:·]\s*/i
 
-const FRONTEND_RE =
-  /frontend|front[\s-]?end|фронт[\s-]?енд|фронтенд|vue|nuxt|react|angular|typescript|\bts\b|javascript|\bjs\b|svelte|next\.?js|css|html|web[\s-]?разработ/i
-
-const NON_FRONTEND_STACK_RE =
-  /\bc#\b|asp\.?\s?net|\.net\b|ms\s?sql|1[сc][\s-]?битрикс|битрикс|bitrix|php\b|laravel|java\b|kotlin|swift|golang|\bgo\b|python|django|flask|1с\b|1c\b/i
-
 /**
  * Читаемый фрагмент «сути» без служебных префиксов.
  */
@@ -55,16 +49,36 @@ export function displayUpdated(raw: string): string {
 }
 
 /**
- * Вакансия выглядит как frontend / web UI.
+ * Разбивает строку ключевых слов: запятая / точка с запятой / перевод строки.
  */
-export function isFrontendLead(lead: Lead): boolean {
-  const hay = `${lead.vacancy} ${lead.company} ${lead.why}`
-  if (FRONTEND_RE.test(hay)) {
-    return true
-  }
-  // Явно другой стек без frontend-маркеров — не подходит.
-  if (NON_FRONTEND_STACK_RE.test(hay)) {
+export function parseKeywords(raw: string): string[] {
+  return raw
+    .split(/[,;\n]+/)
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean)
+}
+
+function leadHaystack(lead: Lead): string {
+  return `${lead.company} ${lead.vacancy} ${lead.why} ${lead.status}`.toLowerCase()
+}
+
+/**
+ * Лид проходит фильтр профиля: все include есть, ни одного exclude нет.
+ */
+export function matchesProfile(
+  lead: Lead,
+  includeRaw: string,
+  excludeRaw: string,
+): boolean {
+  const hay = leadHaystack(lead)
+  const include = parseKeywords(includeRaw)
+  const exclude = parseKeywords(excludeRaw)
+
+  if (include.length && !include.every((term) => hay.includes(term))) {
     return false
   }
-  return false
+  if (exclude.length && exclude.some((term) => hay.includes(term))) {
+    return false
+  }
+  return true
 }

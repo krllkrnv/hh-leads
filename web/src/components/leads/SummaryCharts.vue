@@ -4,8 +4,6 @@
  */
 import { computed } from 'vue'
 import type { ReportMeta } from '@/types/report'
-import { EStatTone } from '@/types/report'
-import StatCard from '@/components/ui/StatCard.vue'
 
 const props = defineProps<{
   meta: ReportMeta
@@ -27,20 +25,18 @@ const MONTHS_SHORT = [
 ]
 
 /**
- * Форматирует ISO-дату в короткий русский вид.
+ * Форматирует ISO-дату.
  */
 function formatDay(isoDate: string): string {
   const match = isoDate.match(/^(\d{4})-(\d{2})-(\d{2})/)
   if (!match) {
     return isoDate
   }
-  const day = Number(match[3])
-  const month = Number(match[2]) - 1
-  return `${day} ${MONTHS_SHORT[month]}`
+  return `${Number(match[3])} ${MONTHS_SHORT[Number(match[2]) - 1]}`
 }
 
 /**
- * Форматирует exportedAt: 2026-08-04 19:16 → 4 авг, 19:16
+ * Форматирует exportedAt.
  */
 function formatExportedAt(raw: string): string {
   const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/)
@@ -72,43 +68,42 @@ const sourceLabel = computed(() => {
   return props.meta.source
 })
 
+const stats = computed(() => [
+  { label: 'Чатов', value: String(props.meta.total) },
+  { label: 'Нужен ответ', value: String(props.meta.actions.reply), tone: 'danger' },
+  { label: 'Приглашения', value: String(props.meta.invites), tone: 'warning' },
+  { label: 'Собеседование', value: String(props.meta.hhStatus.interview), tone: 'success' },
+])
+
 const metaRows = computed(() => [
   { label: 'Период', value: periodLabel.value },
   { label: 'Источник', value: sourceLabel.value },
   { label: 'Обновлён', value: formatExportedAt(props.meta.exportedAt) },
-  { label: 'Тесты', value: String(props.meta.tests) },
-  { label: 'Ждём ответа', value: String(props.meta.actions.wait) },
-  { label: 'Бот', value: String(props.meta.actions.bot) },
+  { label: 'Тестовые', value: String(props.meta.tests) },
+  { label: 'Ожидание', value: String(props.meta.actions.wait) },
+  { label: 'Автоответ', value: String(props.meta.actions.bot) },
 ])
 </script>
 
 <template>
   <section :class="$style.SummaryCharts" aria-label="Сводка">
-    <div :class="$style.stats">
-      <StatCard :value="String(meta.total)" label="Чатов" />
-      <StatCard
-        :value="String(meta.actions.reply)"
-        label="Ответить"
-        :tone="EStatTone.Danger"
-      />
-      <StatCard
-        :value="String(meta.invites)"
-        label="Приглашения"
-        :tone="EStatTone.Warning"
-      />
-      <StatCard
-        :value="String(meta.hhStatus.interview)"
-        label="Собес"
-        :tone="EStatTone.Success"
-      />
+    <div :class="$style.statsPanel">
+      <div
+        v-for="item in stats"
+        :key="item.label"
+        :class="[$style.stat, item.tone && $style[`_${item.tone}`]]"
+      >
+        <span :class="$style.statValue">{{ item.value }}</span>
+        <span :class="$style.statLabel">{{ item.label }}</span>
+      </div>
     </div>
 
-    <dl :class="$style.meta">
-      <div v-for="row in metaRows" :key="row.label" :class="$style.metaRow">
-        <dt :class="$style.metaLabel">{{ row.label }}</dt>
-        <dd :class="$style.metaValue">{{ row.value }}</dd>
-      </div>
-    </dl>
+    <ul :class="$style.meta">
+      <li v-for="row in metaRows" :key="row.label" :class="$style.metaRow">
+        <span :class="$style.metaLabel">{{ row.label }}</span>
+        <span :class="$style.metaValue">{{ row.value }}</span>
+      </li>
+    </ul>
   </section>
 </template>
 
@@ -116,26 +111,80 @@ const metaRows = computed(() => [
 .SummaryCharts {
   @include fade-up(40ms);
   display: grid;
-  gap: var(--space-5);
-  padding: var(--space-5) 0;
-  border-bottom: 0.0625rem solid var(--color-line);
+  gap: var(--space-4);
 }
 
-.stats {
+.statsPanel {
   display: grid;
-  gap: var(--space-5);
+  gap: 0;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  background: var(--color-panel);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
 
   @include respond-to(from-desktop) {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
-.meta {
-  margin: 0;
+.stat {
   display: grid;
-  gap: 0.55rem 2rem;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 1.25rem 1.35rem;
+  border-right: 0.0625rem solid var(--color-line);
+  border-bottom: 0.0625rem solid var(--color-line);
+
+  @include respond-to(from-desktop) {
+    border-bottom: 0;
+
+    &:last-child {
+      border-right: 0;
+    }
+  }
+
+  @include respond-to(tablet) {
+    &:nth-child(2n) {
+      border-right: 0;
+    }
+
+    &:nth-last-child(-n + 2) {
+      border-bottom: 0;
+    }
+  }
+}
+
+.statValue {
+  @include text(mono-lg);
+  color: var(--color-ink);
+}
+
+.statLabel {
+  @include text(caption);
+  color: var(--color-faint);
+}
+
+._danger .statValue {
+  color: var(--color-danger);
+}
+
+._warning .statValue {
+  color: var(--color-warning);
+}
+
+._success .statValue {
+  color: var(--color-success);
+}
+
+.meta {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  background: var(--color-panel);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
 
   @include respond-to(from-desktop) {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -143,27 +192,42 @@ const metaRows = computed(() => [
 }
 
 .metaRow {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.75rem;
+  display: grid;
+  gap: 0.35rem;
   min-width: 0;
-  padding-bottom: 0.45rem;
+  padding: 0.95rem 1.15rem;
+  border-right: 0.0625rem solid var(--color-line);
   border-bottom: 0.0625rem solid var(--color-line);
+
+  @include respond-to(from-desktop) {
+    &:nth-child(3n) {
+      border-right: 0;
+    }
+
+    &:nth-last-child(-n + 3) {
+      border-bottom: 0;
+    }
+  }
+
+  @include respond-to(tablet) {
+    &:nth-child(2n) {
+      border-right: 0;
+    }
+
+    &:nth-last-child(-n + 2) {
+      border-bottom: 0;
+    }
+  }
 }
 
 .metaLabel {
   @include text(caption);
   color: var(--color-faint);
-  flex-shrink: 0;
 }
 
 .metaValue {
-  margin: 0;
-  @include text(caption);
-  font-weight: 600;
+  @include text(meta);
   color: var(--color-ink);
-  text-align: right;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

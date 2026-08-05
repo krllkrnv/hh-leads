@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Очередь лидов: компания + вакансия, суть, чат как главное действие.
+ * Очередь лидов. Клик по строке открывает чат.
  */
 import { useCssModule } from 'vue'
 import type { Lead } from '@/types/report'
@@ -19,14 +19,14 @@ const emit = defineEmits<{
 const $style = useCssModule()
 
 /**
- * Классы строки с учётом «сделано».
+ * Классы строки с учётом «разобрано».
  */
-function rowClass(done: boolean): Array<string | false> {
-  return [$style.row, done && $style._done]
+function rowClass(done: boolean, hasChat: boolean): Array<string | false> {
+  return [$style.row, done && $style._done, hasChat && $style._clickable]
 }
 
 /**
- * Переключает «сделано».
+ * Переключает локальную отметку «разобрано».
  */
 function onToggleDone(id: string, event: Event): void {
   const target = event.target as HTMLInputElement
@@ -34,7 +34,7 @@ function onToggleDone(id: string, event: Event): void {
 }
 
 /**
- * Открывает чат в новой вкладке.
+ * Открывает чат.
  */
 function openChat(lead: Lead): void {
   if (!lead.chatUrl) {
@@ -44,7 +44,7 @@ function openChat(lead: Lead): void {
 }
 
 /**
- * Клик по строке → чат (кроме ссылок и чекбокса).
+ * Клик по строке → чат.
  */
 function onRowActivate(lead: Lead, event: MouseEvent): void {
   const target = event.target as HTMLElement
@@ -55,7 +55,7 @@ function onRowActivate(lead: Lead, event: MouseEvent): void {
 }
 
 /**
- * Показывает статус только если он не пустой и не банальный «Отклик».
+ * Статус только если не «Отклик».
  */
 function showStatus(status: string): boolean {
   const value = status.trim()
@@ -69,25 +69,22 @@ function showStatus(status: string): boolean {
 <template>
   <div :class="$style.LeadsTable">
     <p v-if="!leads.length" :class="$style.empty">
-      В этой очереди пусто. Смените вкладку или сбросьте поиск.
+      В этой очереди пусто. Смените вкладку или ослабьте фильтр профиля.
     </p>
 
     <ul v-else :class="$style.list">
       <li
         v-for="lead in leads"
         :key="lead.id"
-        :class="rowClass(isDone(lead.id))"
-        :data-tag="lead.tag"
+        :class="rowClass(isDone(lead.id), Boolean(lead.chatUrl))"
         :tabindex="lead.chatUrl ? 0 : undefined"
         :role="lead.chatUrl ? 'link' : undefined"
         @click="onRowActivate(lead, $event)"
         @keydown.enter="openChat(lead)"
         @keydown.space.prevent="openChat(lead)"
       >
-        <div :class="$style.rail" aria-hidden="true" />
-
         <div :class="$style.main">
-          <div :class="$style.top">
+          <div :class="$style.head">
             <UiPill :tag="lead.tag" />
             <span :class="$style.company">{{ lead.company }}</span>
             <time :class="$style.date" :datetime="lead.updated">
@@ -119,29 +116,20 @@ function showStatus(status: string): boolean {
           </p>
         </div>
 
-        <div :class="$style.actions" @click.stop>
-          <a
-            v-if="lead.chatUrl"
-            :href="lead.chatUrl"
-            target="_blank"
-            rel="noreferrer"
-            :class="$style.chatBtn"
-          >
-            Чат
-          </a>
-          <span v-else :class="$style.noChat">нет чата</span>
-
-          <label :class="$style.done">
-            <input
-              :class="$style.checkbox"
-              type="checkbox"
-              :aria-label="`Отметить ${lead.company}`"
-              :checked="isDone(lead.id)"
-              @change="onToggleDone(lead.id, $event)"
-            />
-            <span :class="$style.doneLabel">готово</span>
-          </label>
-        </div>
+        <label
+          :class="$style.done"
+          title="Личная отметка: уже ответили или разобрали. Только в браузере."
+          @click.stop
+        >
+          <input
+            :class="$style.checkbox"
+            type="checkbox"
+            :aria-label="`Отметить разобранным: ${lead.company}`"
+            :checked="isDone(lead.id)"
+            @change="onToggleDone(lead.id, $event)"
+          />
+          <span :class="$style.doneLabel">разобрано</span>
+        </label>
       </li>
     </ul>
   </div>
@@ -157,34 +145,33 @@ function showStatus(status: string): boolean {
   list-style: none;
   margin: 0;
   padding: 0;
-  border: 0.0625rem solid var(--color-line);
-  border-radius: var(--radius-lg);
   background: var(--color-panel);
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
 .row {
-  position: relative;
   display: grid;
-  grid-template-columns: 0.1875rem minmax(0, 1fr) auto;
-  gap: 0;
-  padding: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: start;
+  padding: 1.05rem 1.2rem;
   border-bottom: 0.0625rem solid var(--color-line);
-  cursor: pointer;
-  transition: background-color var(--dur) var(--ease);
 
   &:last-child {
     border-bottom: 0;
   }
 
-  &:hover,
-  &:focus-visible {
-    background: var(--color-raised);
-    outline: none;
+  &._clickable {
+    cursor: pointer;
+
+    &:focus-visible {
+      outline: none;
+    }
   }
 
   &._done {
-    opacity: 0.48;
+    opacity: 0.42;
 
     .company {
       text-decoration: line-through;
@@ -193,64 +180,25 @@ function showStatus(status: string): boolean {
   }
 }
 
-.rail {
-  background: var(--rail-invite);
-
-  .row[data-tag='reply'] & {
-    background: var(--rail-reply);
-  }
-
-  .row[data-tag='call'] & {
-    background: var(--rail-call);
-  }
-
-  .row[data-tag='interview'] & {
-    background: var(--rail-interview);
-  }
-
-  .row[data-tag='test'] & {
-    background: var(--rail-test);
-  }
-
-  .row[data-tag='invite'] & {
-    background: var(--rail-invite);
-  }
-
-  .row[data-tag='wait'] & {
-    background: var(--rail-wait);
-  }
-
-  .row[data-tag='bot'] & {
-    background: var(--rail-bot);
-  }
-
-  .row[data-tag='discuss'] & {
-    background: var(--rail-discuss);
-  }
-
-  .row[data-tag='closed'] & {
-    background: var(--rail-closed);
-  }
-}
-
 .main {
   min-width: 0;
-  padding: 0.85rem 1rem;
   display: grid;
   gap: 0.35rem;
 }
 
-.top {
-  display: flex;
-  flex-wrap: wrap;
+.head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.55rem 0.75rem;
+  gap: 0.65rem;
+  min-width: 0;
 }
 
 .company {
-  flex: 1 1 10rem;
   min-width: 0;
-  font-weight: 650;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.004em;
   color: var(--color-ink);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -261,110 +209,69 @@ function showStatus(status: string): boolean {
   @include text(mono);
   color: var(--color-faint);
   white-space: nowrap;
-  margin-left: auto;
 }
 
 .vacancyLine {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: baseline;
-  gap: 0.45rem 0.75rem;
+  gap: 0.55rem;
   min-width: 0;
 }
 
 .vacancy,
 .vacancyPlain {
   min-width: 0;
-  max-width: 100%;
+  flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 0.875rem;
   font-weight: 500;
-  color: var(--color-ink);
+  color: var(--color-muted);
+  text-decoration: none;
 }
 
 .vacancy {
-  text-decoration: none;
-  border-bottom: 0.0625rem solid var(--color-line-strong);
+  transition: color var(--dur) var(--ease);
 
-  &:hover {
-    color: var(--color-accent);
-    border-color: var(--color-accent);
+  @include hover {
+    color: var(--color-ink);
   }
 }
 
-.vacancyPlain {
-  color: var(--color-muted);
-}
-
 .status {
+  flex: 0 0 auto;
   @include text(mono);
   font-size: 0.6875rem;
   color: var(--color-faint);
-  white-space: nowrap;
 }
 
 .why {
   margin: 0;
-  max-width: 42rem;
-  color: var(--color-muted);
-  line-height: 1.45;
+  max-width: 48rem;
+  color: var(--color-faint);
+  @include text(dense);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  @include text(body);
-  font-size: 0.875rem;
-}
-
-.actions {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: center;
-  gap: 0.55rem;
-  padding: 0.85rem 1rem 0.85rem 0;
-  min-width: 6.5rem;
-}
-
-.chatBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 2rem;
-  padding: 0 0.85rem;
-  border-radius: var(--radius-sm);
-  background: var(--color-accent);
-  color: #fff;
-  text-decoration: none;
-  @include text(caption);
-  font-weight: 650;
-  transition: background-color var(--dur) var(--ease);
-
-  &:hover {
-    background: var(--color-accent-hover);
-  }
-}
-
-.noChat {
-  @include text(mono);
-  color: var(--color-faint);
-  text-align: center;
 }
 
 .done {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 0.35rem;
+  margin-top: 0.15rem;
   cursor: pointer;
   user-select: none;
+  white-space: nowrap;
 }
 
 .checkbox {
-  width: 1rem;
-  height: 1rem;
-  accent-color: var(--color-accent);
+  width: 0.95rem;
+  height: 0.95rem;
+  accent-color: var(--color-accent-deep);
   cursor: pointer;
 }
 
@@ -376,41 +283,31 @@ function showStatus(status: string): boolean {
 
 .empty {
   margin: 0;
-  padding: var(--space-7) var(--space-4);
+  padding: var(--space-7) var(--space-5);
   text-align: center;
   @include text(body);
   color: var(--color-muted);
-  border: 0.0625rem dashed var(--color-line);
-  border-radius: var(--radius-lg);
   background: var(--color-panel);
+  border-radius: var(--radius-lg);
 }
 
 @include respond-to(tablet) {
   .row {
-    grid-template-columns: 0.1875rem minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
   }
 
-  .actions {
-    grid-column: 2;
-    flex-direction: row;
-    align-items: center;
-    justify-content: flex-start;
-    padding: 0 1rem 0.85rem;
-    min-width: 0;
+  .head {
+    grid-template-columns: auto minmax(0, 1fr);
+    row-gap: 0.3rem;
   }
 
   .date {
-    margin-left: 0;
-    width: 100%;
-    order: 3;
+    grid-column: 2;
   }
 
-  .top {
-    .date {
-      margin-left: auto;
-      width: auto;
-      order: 0;
-    }
+  .done {
+    margin-top: 0;
   }
 }
 </style>

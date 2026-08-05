@@ -1,19 +1,23 @@
 <script setup lang="ts">
 /**
- * Фильтры очередей, поиск и переключатель закрытых.
+ * Очереди, поиск и пресеты профиля (стек / грейд / роль).
  */
+import { ref } from 'vue'
 import type { FilterKey } from '@/types/report'
 import {
   EFilterKey,
   FILTER_LABELS,
 } from '@/types/report'
+import type { ProfilePreset } from '@/lib/profilePresets'
+import { PROFILE_GROUPS } from '@/lib/profilePresets'
 import UiTextInput from '@/components/ui/UiTextInput.vue'
 
 defineProps<{
   filter: FilterKey
   query: string
   hideClosed: boolean
-  frontendOnly: boolean
+  includeKeywords: string
+  excludeKeywords: string
   counts: Record<FilterKey, number>
   visibleCount: number
 }>()
@@ -22,7 +26,8 @@ const emit = defineEmits<{
   'update:filter': [value: FilterKey]
   'update:query': [value: string]
   'update:hideClosed': [value: boolean]
-  'update:frontendOnly': [value: boolean]
+  'update:includeKeywords': [value: string]
+  'update:excludeKeywords': [value: string]
 }>()
 
 const FILTER_ORDER: FilterKey[] = [
@@ -37,18 +42,13 @@ const FILTER_ORDER: FilterKey[] = [
   EFilterKey.Closed,
 ]
 
+const openGroupId = ref<string | null>(null)
+
 /**
  * Переключает активную очередь.
  */
 function handleFilter(key: FilterKey): void {
   emit('update:filter', key)
-}
-
-/**
- * Обновляет строку поиска.
- */
-function onQuery(value: string): void {
-  emit('update:query', value)
 }
 
 /**
@@ -60,17 +60,40 @@ function onHideClosed(event: Event): void {
 }
 
 /**
- * Переключает фильтр frontend-вакансий.
+ * Открывает группу пресетов (hover / focus).
  */
-function onFrontendOnly(event: Event): void {
-  const target = event.target as HTMLInputElement
-  emit('update:frontendOnly', target.checked)
+function openGroup(id: string): void {
+  openGroupId.value = id
+}
+
+/**
+ * Закрывает группу пресетов.
+ */
+function closeGroup(): void {
+  openGroupId.value = null
+}
+
+/**
+ * Применяет пресет профиля.
+ */
+function applyPreset(preset: ProfilePreset): void {
+  emit('update:includeKeywords', preset.include)
+  emit('update:excludeKeywords', preset.exclude ?? '')
+  closeGroup()
+}
+
+/**
+ * Сбрасывает профиль.
+ */
+function clearProfile(): void {
+  emit('update:includeKeywords', '')
+  emit('update:excludeKeywords', '')
 }
 </script>
 
 <template>
   <div :class="$style.LeadFilters">
-    <div :class="$style.tabs" role="tablist" aria-label="Очереди">
+    <div :class="$style.tabsShell" role="tablist" aria-label="Очереди">
       <button
         v-for="key in FILTER_ORDER"
         :key="key"
@@ -85,35 +108,99 @@ function onFrontendOnly(event: Event): void {
       </button>
     </div>
 
+    <div :class="$style.profile">
+      <div :class="$style.profileFields">
+        <label :class="$style.field">
+          <span :class="$style.fieldLabel">Содержит</span>
+          <UiTextInput
+            :model-value="includeKeywords"
+            placeholder="например: python, django — все слова должны встретиться"
+            @update:model-value="emit('update:includeKeywords', $event)"
+          />
+        </label>
+        <label :class="$style.field">
+          <span :class="$style.fieldLabel">Исключить</span>
+          <UiTextInput
+            :model-value="excludeKeywords"
+            placeholder="например: битрикс, php"
+            @update:model-value="emit('update:excludeKeywords', $event)"
+          />
+        </label>
+      </div>
+
+      <div :class="$style.presetsBlock">
+        <div :class="$style.presetsHead">
+          <span :class="$style.fieldLabel">Пресеты</span>
+          <button
+            type="button"
+            :class="$style.clearBtn"
+            @click="clearProfile"
+          >
+            Сбросить
+          </button>
+        </div>
+
+        <div :class="$style.groups" @mouseleave="closeGroup">
+          <div
+            v-for="group in PROFILE_GROUPS"
+            :key="group.id"
+            :class="[$style.group, openGroupId === group.id && $style._open]"
+            @mouseenter="openGroup(group.id)"
+            @focusin="openGroup(group.id)"
+          >
+            <button
+              type="button"
+              :class="$style.groupBtn"
+              :aria-expanded="openGroupId === group.id"
+            >
+              {{ group.label }}
+              <span :class="$style.groupCount">{{ group.presets.length }}</span>
+            </button>
+
+            <div
+              v-show="openGroupId === group.id"
+              :class="$style.menu"
+              role="menu"
+            >
+              <button
+                v-for="preset in group.presets"
+                :key="preset.label"
+                type="button"
+                role="menuitem"
+                :class="$style.menuItem"
+                :title="[
+                  preset.include,
+                  preset.exclude ? `исключить: ${preset.exclude}` : '',
+                ].filter(Boolean).join(' · ')"
+                @click="applyPreset(preset)"
+              >
+                <span :class="$style.menuLabel">{{ preset.label }}</span>
+                <span :class="$style.menuMeta">{{ preset.include }}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div :class="$style.controls">
       <UiTextInput
         :model-value="query"
-        placeholder="Компания, вакансия, фрагмент…"
-        @update:model-value="onQuery"
+        placeholder="Быстрый поиск по компании или вакансии…"
+        @update:model-value="emit('update:query', $event)"
       />
-      <div :class="$style.toggles">
-        <label :class="$style.check">
-          <input
-            :class="$style.checkbox"
-            type="checkbox"
-            :checked="hideClosed"
-            @change="onHideClosed"
-          />
-          <span :class="$style.checkLabel">Скрыть закрытые</span>
-        </label>
-        <label :class="$style.check">
-          <input
-            :class="$style.checkbox"
-            type="checkbox"
-            :checked="frontendOnly"
-            @change="onFrontendOnly"
-          />
-          <span :class="$style.checkLabel">Только frontend</span>
-        </label>
-      </div>
+      <label :class="$style.check">
+        <input
+          :class="$style.checkbox"
+          type="checkbox"
+          :checked="hideClosed"
+          @change="onHideClosed"
+        />
+        <span :class="$style.checkLabel">Скрыть закрытые</span>
+      </label>
       <span :class="$style.visible">
-        показано
-        <span :class="$style.visibleNum">{{ visibleCount }}</span>
+        {{ visibleCount }}
+        <span :class="$style.visibleMuted">в очереди</span>
       </span>
     </div>
   </div>
@@ -123,59 +210,46 @@ function onFrontendOnly(event: Event): void {
 .LeadFilters {
   display: grid;
   gap: var(--space-4);
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  padding: var(--space-4) 0;
-  background: color-mix(in srgb, var(--color-bg) 92%, transparent);
-  backdrop-filter: blur(0.5rem);
 }
 
-.tabs {
+.tabsShell {
   display: flex;
   flex-wrap: wrap;
-  gap: 0;
-  border-bottom: 0.0625rem solid var(--color-line);
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.25rem;
+  background: var(--color-panel);
+  border-radius: var(--radius-lg);
 }
 
 .tab {
   appearance: none;
-  position: relative;
   display: inline-flex;
-  align-items: baseline;
-  gap: 0.45rem;
-  min-height: 2.75rem;
-  padding: 0.5rem 0.85rem;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.75rem;
   border: 0;
+  border-radius: calc(var(--radius) - 0.05rem);
   background: transparent;
   cursor: pointer;
-  color: var(--color-muted);
-  transition: color var(--dur) var(--ease);
+  color: var(--color-faint);
+  transition:
+    color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease);
 
-  &::after {
-    content: '';
-    position: absolute;
-    left: 0.85rem;
-    right: 0.85rem;
-    bottom: -0.0625rem;
-    height: 0.125rem;
-    background: transparent;
-    transition: background-color var(--dur) var(--ease);
-  }
-
-  &:hover {
+  @include hover {
     color: var(--color-ink);
+    background: var(--color-raised);
   }
 
   &._active {
-    color: var(--color-ink);
-
-    &::after {
-      background: var(--color-accent);
-    }
+    color: var(--color-accent-text);
+    background: var(--color-accent);
 
     .tabCount {
-      color: var(--color-accent);
+      color: var(--color-accent-text);
+      opacity: 0.72;
     }
   }
 }
@@ -183,28 +257,169 @@ function onFrontendOnly(event: Event): void {
 .tabLabel {
   @include text(caption);
   font-weight: 600;
+  line-height: 1;
 }
 
 .tabCount {
   @include text(mono);
+  font-size: 0.75rem;
+  line-height: 1;
   color: var(--color-faint);
+}
+
+.profile {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--color-panel);
+  border-radius: var(--radius-lg);
+}
+
+.profileFields {
+  display: grid;
+  gap: var(--space-3);
+
+  @include respond-to(from-desktop) {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.field {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.fieldLabel {
+  @include text(label);
+  color: var(--color-faint);
+}
+
+.presetsBlock {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.presetsHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.clearBtn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--color-faint);
+  @include text(caption);
+  cursor: pointer;
+  padding: 0;
+
+  @include hover {
+    color: var(--color-accent);
+  }
+}
+
+.groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.group {
+  position: relative;
+}
+
+.groupBtn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--color-raised);
+  color: var(--color-muted);
+  padding: 0.45rem 0.8rem;
+  @include text(caption);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    border-radius var(--dur) var(--ease);
+
+  .group:hover &,
+  .group._open & {
+    color: var(--color-ink);
+    background: var(--color-accent-soft);
+    border-radius: var(--radius-hover);
+  }
+}
+
+.groupCount {
+  @include text(mono);
+  font-size: 0.6875rem;
+  color: var(--color-faint);
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  z-index: 20;
+  min-width: 16rem;
+  max-width: min(22rem, 80vw);
+  max-height: 18rem;
+  overflow: auto;
+  padding: 0.4rem;
+  border-radius: var(--radius-lg);
+  background: var(--color-raised);
+  box-shadow: 0 0.75rem 2rem rgb(0 0 0 / 35%);
+}
+
+.menuItem {
+  appearance: none;
+  width: 100%;
+  display: grid;
+  gap: 0.15rem;
+  text-align: left;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--color-ink);
+  padding: 0.55rem 0.7rem;
+  cursor: pointer;
+
+  @include hover {
+    background: var(--color-panel);
+  }
+}
+
+.menuLabel {
+  @include text(caption);
+  font-weight: 600;
+}
+
+.menuMeta {
+  @include text(mono);
+  font-size: 0.6875rem;
+  color: var(--color-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .controls {
   display: grid;
   gap: var(--space-3);
   align-items: center;
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-panel);
+  border-radius: var(--radius-lg);
 
   @include respond-to(from-desktop) {
     grid-template-columns: 1fr auto auto;
   }
-}
-
-.toggles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem 1.25rem;
-  align-items: center;
 }
 
 .check {
@@ -218,7 +433,7 @@ function onFrontendOnly(event: Event): void {
 .checkbox {
   width: 1rem;
   height: 1rem;
-  accent-color: var(--color-accent);
+  accent-color: var(--color-accent-deep);
 }
 
 .checkLabel {
@@ -228,11 +443,13 @@ function onFrontendOnly(event: Event): void {
 
 .visible {
   @include text(mono);
-  color: var(--color-faint);
+  font-weight: 600;
+  color: var(--color-ink);
+  white-space: nowrap;
 }
 
-.visibleNum {
-  color: var(--color-ink);
-  font-weight: 600;
+.visibleMuted {
+  font-weight: 500;
+  color: var(--color-faint);
 }
 </style>

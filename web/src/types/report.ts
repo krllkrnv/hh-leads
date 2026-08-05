@@ -108,24 +108,24 @@ export enum EStatTone {
 
 export const FILTER_LABELS: Record<FilterKey, string> = {
   [EFilterKey.All]: 'Все',
-  [EFilterKey.Reply]: 'Ответить',
+  [EFilterKey.Reply]: 'Нужен ответ',
   [EFilterKey.Call]: 'Связаться',
-  [EFilterKey.Interview]: 'Собес',
-  [EFilterKey.Test]: 'Тесты',
+  [EFilterKey.Interview]: 'Собеседование',
+  [EFilterKey.Test]: 'Тестовое',
   [EFilterKey.Invites]: 'Приглашения',
-  [EFilterKey.Wait]: 'Ждём',
-  [EFilterKey.Bot]: 'Бот',
+  [EFilterKey.Wait]: 'Ожидание',
+  [EFilterKey.Bot]: 'Автоответ',
   [EFilterKey.Closed]: 'Закрытые',
 }
 
 export const LEAD_TAG_LABELS: Record<LeadTag, string> = {
-  reply: 'ответить',
+  reply: 'нужен ответ',
   call: 'связаться',
-  interview: 'собес',
-  test: 'тест',
+  interview: 'собеседование',
+  test: 'тестовое',
   invite: 'приглашение',
-  wait: 'ждём',
-  bot: 'бот',
+  wait: 'ожидание',
+  bot: 'автоответ',
   discuss: 'обсуждение',
   closed: 'закрыто',
 }

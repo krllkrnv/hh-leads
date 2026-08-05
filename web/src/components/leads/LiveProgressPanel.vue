@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Живая панель прогресса синка/upload: этапы, бар, лог.
+ * Панель прогресса sync/upload — в потоке, с expand-анимацией.
  */
 import { computed, nextTick, ref, watch } from 'vue'
 import type { ProgressStage } from '@/types/progress'
@@ -16,7 +16,7 @@ type LogItem = {
 
 const props = defineProps<{
   active: boolean
-  mode: 'sync' | 'upload' | 'boot' | null
+  mode: 'sync' | 'upload' | null
   stage: ProgressStage | null
   message: string
   current: number
@@ -35,9 +35,6 @@ const title = computed(() => {
   if (props.mode === 'upload') {
     return 'Загрузка файла'
   }
-  if (props.mode === 'boot') {
-    return 'Проверка сессии'
-  }
   return 'Синхронизация чатов'
 })
 
@@ -55,7 +52,7 @@ const visibleStages = computed(() => {
 const stageOrder = computed(() => visibleStages.value.map((item) => item.id))
 
 /**
- * Статус этапа для индикатора: pending / active / done.
+ * Статус этапа: pending / active / done.
  */
 function stageStatus(id: ProgressStage): 'pending' | 'active' | 'done' {
   const order = stageOrder.value
@@ -106,124 +103,132 @@ watch(
 </script>
 
 <template>
-  <Transition name="live-fade">
-    <section
-      v-if="active"
-      :class="$style.LiveProgressPanel"
-      role="status"
-      aria-live="polite"
-      aria-busy="true"
-    >
-      <header :class="$style.header">
-        <div :class="$style.pulseWrap" aria-hidden="true">
-          <span :class="$style.pulseCore" />
-          <span :class="$style.pulseRing" />
-        </div>
-        <div>
-          <h2 :class="$style.title">{{ title }}</h2>
-          <p :class="$style.message">{{ message || 'Работаю…' }}</p>
-        </div>
-        <div :class="$style.headerAside">
-          <div v-if="total > 0" :class="$style.counter">
-            <span :class="$style.counterValue">{{ current }}</span>
-            <span :class="$style.counterSep">/</span>
-            <span>{{ total }}</span>
+  <Transition name="progress-expand">
+    <div v-if="active" :class="$style.shell">
+      <div :class="$style.shellInner">
+        <section
+          :class="$style.LiveProgressPanel"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div :class="$style.barTrack" aria-hidden="true">
+            <div
+              :class="$style.barFill"
+              :style="{ width: `${Math.max(percent, total ? 4 : 12)}%` }"
+            />
           </div>
-          <button
-            v-if="mode === 'sync' || mode === 'upload'"
-            type="button"
-            :class="$style.cancelBtn"
-            @click="emit('cancel')"
-          >
-            Стоп
-          </button>
-        </div>
-      </header>
 
-      <div :class="$style.barTrack" aria-hidden="true">
-        <div
-          :class="$style.barFill"
-          :style="{ width: `${Math.max(percent, total ? 4 : 12)}%` }"
-        />
-        <div :class="$style.barSheen" />
+          <header :class="$style.header">
+            <div :class="$style.pulseWrap" aria-hidden="true">
+              <span :class="$style.pulseCore" />
+              <span :class="$style.pulseRing" />
+            </div>
+            <div :class="$style.copy">
+              <h2 :class="$style.title">{{ title }}</h2>
+              <p :class="$style.message">{{ message || 'Работаю…' }}</p>
+            </div>
+            <div :class="$style.headerAside">
+              <div v-if="total > 0" :class="$style.counter">
+                <span :class="$style.counterValue">{{ current }}</span>
+                <span :class="$style.counterSep">/</span>
+                <span>{{ total }}</span>
+              </div>
+              <button
+                v-if="mode === 'sync' || mode === 'upload'"
+                type="button"
+                :class="$style.cancelBtn"
+                @click="emit('cancel')"
+              >
+                Стоп
+              </button>
+            </div>
+          </header>
+
+          <ol :class="$style.stages">
+            <li
+              v-for="item in visibleStages"
+              :key="item.id"
+              :class="[
+                $style.stage,
+                $style[`_${stageStatus(item.id)}`],
+              ]"
+            >
+              <span :class="$style.stageDot" />
+              <span :class="$style.stageLabel">{{ item.label }}</span>
+            </li>
+          </ol>
+
+          <div ref="logRef" :class="$style.log">
+            <div
+              v-for="line in logs"
+              :key="line.id"
+              :class="[
+                $style.logLine,
+                line.stage === 'warn' && $style._warn,
+                line.stage === 'error' && $style._error,
+                line.stage === 'done' && $style._done,
+              ]"
+            >
+              <span :class="$style.logTime">
+                {{ new Date(line.at).toLocaleTimeString('ru-RU') }}
+              </span>
+              <span :class="$style.logMsg">
+                <template v-if="line.company">
+                  <span :class="$style.logCompany">{{ line.company }}</span>
+                  ·
+                </template>
+                {{ line.message }}
+              </span>
+            </div>
+            <p v-if="!logs.length" :class="$style.logEmpty">Жду первые события…</p>
+          </div>
+        </section>
       </div>
-
-      <ol :class="$style.stages">
-        <li
-          v-for="item in visibleStages"
-          :key="item.id"
-          :class="[
-            $style.stage,
-            $style[`_${stageStatus(item.id)}`],
-          ]"
-        >
-          <span :class="$style.stageDot" />
-          <span :class="$style.stageLabel">{{ item.label }}</span>
-        </li>
-      </ol>
-
-      <div ref="logRef" :class="$style.log">
-        <div
-          v-for="line in logs"
-          :key="line.id"
-          :class="[
-            $style.logLine,
-            line.stage === 'warn' && $style._warn,
-            line.stage === 'error' && $style._error,
-            line.stage === 'done' && $style._done,
-          ]"
-        >
-          <span :class="$style.logTime">
-            {{ new Date(line.at).toLocaleTimeString('ru-RU') }}
-          </span>
-          <span :class="$style.logMsg">
-            <template v-if="line.company">
-              <span :class="$style.logCompany">{{ line.company }}</span>
-              ·
-            </template>
-            {{ line.message }}
-          </span>
-        </div>
-        <p v-if="!logs.length" :class="$style.logEmpty">Жду первые события…</p>
-      </div>
-    </section>
+    </div>
   </Transition>
 </template>
 
 <style module lang="scss">
-.LiveProgressPanel {
-  @include fade-up;
-  position: relative;
-  overflow: hidden;
+.shell {
   display: grid;
-  gap: var(--space-4);
-  margin: var(--space-4) 0;
-  padding: var(--space-5);
-  border: 0.0625rem solid var(--color-line);
-  border-radius: var(--radius-lg);
+  grid-template-rows: 1fr;
+}
+
+.shellInner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.LiveProgressPanel {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-4) 0 0;
+  padding: 0 0 var(--space-4);
   background: var(--color-panel);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
 }
 
 .header {
-  position: relative;
   display: grid;
   grid-template-columns: auto 1fr auto;
-  gap: var(--space-4);
+  gap: var(--space-3);
   align-items: center;
+  padding: 0 var(--space-5);
 }
 
 .pulseWrap {
   position: relative;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 1.75rem;
+  height: 1.75rem;
 }
 
 .pulseCore {
   position: absolute;
-  inset: 0.55rem;
+  inset: 0.45rem;
   border-radius: 50%;
   background: var(--color-accent);
-  box-shadow: 0 0 0.75rem rgb(59 130 246 / 45%);
 }
 
 .pulseRing {
@@ -231,8 +236,12 @@ watch(
   inset: 0;
   border: 0.125rem solid var(--color-accent);
   border-radius: 50%;
-  opacity: 0.55;
+  opacity: 0.45;
   animation: pulseRing 1.4s var(--ease) infinite;
+}
+
+.copy {
+  min-width: 0;
 }
 
 .title {
@@ -241,42 +250,46 @@ watch(
 }
 
 .message {
-  margin: 0.35rem 0 0;
+  margin: 0.2rem 0 0;
   @include text(caption);
   color: var(--color-muted);
   min-height: 1.2em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .counter {
-  @include text(mono-lg);
-  font-size: 1.25rem;
+  @include text(mono);
+  font-size: 1rem;
+  font-weight: 600;
   color: var(--color-ink);
   font-variant-numeric: tabular-nums;
 }
 
 .headerAside {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.5rem;
-  margin-left: auto;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .cancelBtn {
   appearance: none;
-  border: 0.0625rem solid var(--color-line-strong);
-  border-radius: var(--radius-sm);
-  background: transparent;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--color-raised);
   color: var(--color-muted);
-  padding: 0.35rem 0.65rem;
+  padding: 0.4rem 0.75rem;
   @include text(caption);
   font-weight: 600;
   cursor: pointer;
-  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  transition:
+    color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease);
 
-  &:hover {
+  @include hover {
     color: var(--color-danger);
-    border-color: var(--color-danger);
+    background: var(--color-danger-soft);
   }
 }
 
@@ -290,76 +303,49 @@ watch(
 }
 
 .barTrack {
-  position: relative;
-  overflow: hidden;
-  height: 0.375rem;
-  border-radius: 999px;
+  height: 0.2rem;
   background: var(--color-raised);
 }
 
 .barFill {
   height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(
-    90deg,
-    var(--color-accent),
-    var(--color-accent-hover)
-  );
+  background: var(--color-accent);
   transition: width 0.25s var(--ease);
 }
 
-.barSheen {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    110deg,
-    transparent 30%,
-    rgb(255 255 255 / 18%) 50%,
-    transparent 70%
-  );
-  background-size: 200% 100%;
-  animation: sheen 1.6s linear infinite;
-}
-
 .stages {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
-  gap: var(--space-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
   margin: 0;
-  padding: 0;
+  padding: 0 var(--space-5);
   list-style: none;
 }
 
 .stage {
-  display: grid;
+  display: inline-flex;
+  align-items: center;
   gap: 0.4rem;
-  justify-items: start;
-  padding: 0.55rem 0.65rem;
-  border: 0.0625rem solid var(--color-line);
+  padding: 0.35rem 0.7rem;
   border-radius: var(--radius);
   background: var(--color-raised);
   color: var(--color-faint);
   transition:
-    border-color var(--dur) var(--ease),
     color var(--dur) var(--ease),
     background-color var(--dur) var(--ease);
 
   &._active {
-    border-color: var(--color-accent);
-    color: var(--color-ink);
-    background: var(--color-accent-soft);
+    color: var(--color-accent-text);
+    background: var(--color-accent);
 
     .stageDot {
-      background: var(--color-accent);
-      box-shadow: 0 0 0 0.25rem rgb(59 130 246 / 20%);
+      background: var(--color-accent-text);
       animation: dotBlink 1s ease infinite;
     }
   }
 
   &._done {
-    color: var(--color-success);
-    border-color: color-mix(in srgb, var(--color-success) 45%, var(--color-line));
+    color: var(--color-muted);
 
     .stageDot {
       background: var(--color-success);
@@ -368,8 +354,8 @@ watch(
 }
 
 .stageDot {
-  width: 0.45rem;
-  height: 0.45rem;
+  width: 0.35rem;
+  height: 0.35rem;
   border-radius: 50%;
   background: var(--color-faint);
 }
@@ -380,11 +366,10 @@ watch(
 }
 
 .log {
-  position: relative;
-  max-height: 14rem;
+  max-height: 10rem;
   overflow: auto;
+  margin: 0 var(--space-4);
   padding: var(--space-3);
-  border: 0.0625rem solid var(--color-line);
   border-radius: var(--radius);
   background: var(--color-void);
   scroll-behavior: smooth;
@@ -392,10 +377,10 @@ watch(
 
 .logLine {
   display: grid;
-  grid-template-columns: 5.5rem 1fr;
+  grid-template-columns: 5.25rem 1fr;
   gap: var(--space-3);
-  padding: 0.35rem 0;
-  border-bottom: 0.0625rem solid color-mix(in srgb, var(--color-line) 70%, transparent);
+  padding: 0.3rem 0;
+  border-bottom: 0.0625rem solid color-mix(in srgb, var(--color-line) 60%, transparent);
   animation: lineIn 0.25s var(--ease) both;
 
   &:last-child {
@@ -449,16 +434,6 @@ watch(
   }
 }
 
-@keyframes sheen {
-  from {
-    background-position: 200% 0;
-  }
-
-  to {
-    background-position: -200% 0;
-  }
-}
-
 @keyframes dotBlink {
   0%,
   100% {
@@ -484,16 +459,24 @@ watch(
 </style>
 
 <style lang="scss">
-.live-fade-enter-active,
-.live-fade-leave-active {
+.progress-expand-enter-active,
+.progress-expand-leave-active {
   transition:
-    opacity 0.25s ease,
-    transform 0.25s ease;
+    grid-template-rows 0.38s var(--ease, cubic-bezier(0.12, 1, 0.48, 1)),
+    opacity 0.28s var(--ease, cubic-bezier(0.12, 1, 0.48, 1));
+  display: grid;
+  overflow: hidden;
 }
 
-.live-fade-enter-from,
-.live-fade-leave-to {
+.progress-expand-enter-from,
+.progress-expand-leave-to {
+  grid-template-rows: 0fr;
   opacity: 0;
-  transform: translateY(0.4rem);
+}
+
+.progress-expand-enter-to,
+.progress-expand-leave-from {
+  grid-template-rows: 1fr;
+  opacity: 1;
 }
 </style>

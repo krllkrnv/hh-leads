@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Компактный тег типа лида.
+ * Тег типа лида: soft fill.
  */
 import { computed, useCssModule } from 'vue'
 import type { LeadTag } from '@/types/report'
@@ -23,50 +23,48 @@ const classList = computed(() => [$style.UiPill, $style[`_${props.tag}`]])
 .UiPill {
   display: inline-flex;
   align-items: center;
+  width: fit-content;
   min-height: 1.5rem;
-  padding: 0.1rem 0.45rem;
-  border: 0.0625rem solid var(--color-line);
+  padding: 0.2rem 0.65rem;
+  gap: 0.35rem;
+  border: 0.0625rem solid transparent;
   border-radius: var(--radius-sm);
   background: var(--color-raised);
   color: var(--color-muted);
-  @include text(mono);
-  font-size: 0.6875rem;
+  @include text(caption);
+  user-select: none;
   white-space: nowrap;
 
   &._reply,
   &._call {
     color: var(--color-warning);
-    border-color: var(--color-warning);
     background: var(--color-warning-soft);
   }
 
   &._interview {
     color: var(--color-success);
-    border-color: var(--color-success);
     background: var(--color-success-soft);
   }
 
   &._test {
-    color: var(--rail-test);
-    border-color: var(--rail-test);
-    background: var(--color-panel);
+    color: var(--color-accent);
+    background: var(--color-accent-soft);
   }
 
   &._invite {
     color: var(--color-muted);
-    border-color: var(--color-line-strong);
+    background: var(--color-raised);
   }
 
   &._wait,
   &._bot,
   &._discuss {
     color: var(--color-faint);
-    border-color: var(--color-line);
+    background: var(--color-raised);
   }
 
   &._closed {
     color: var(--color-danger);
-    border-color: var(--color-danger);
     background: var(--color-danger-soft);
   }
 }

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <rect width="32" height="32" rx="6" fill="#d6001c"/>
+  <!-- HHL -->
+  <path
+    fill="#f7f7f7"
+    d="
+      M2.5 7h2.6v7h3.6V7h2.6v18H8.7v-7.4H5.1V25H2.5V7z
+      M13.2 7h2.6v7h3.6V7h2.6v18h-2.6v-7.4h-3.6V25h-2.6V7z
+      M24.2 7h2.6v15.4H30V25h-5.8V7z
+    "
+  />
+</svg>

@@ -8,7 +8,7 @@ import {
   uploadReportStream,
 } from '@/api/reportRepo'
 import type { ProgressEvent, ProgressStage } from '@/types/progress'
-import { isFrontendLead } from '@/lib/leadDisplay'
+import { matchesProfile } from '@/lib/leadDisplay'
 import {
   DONE_STORAGE_KEY,
   EFilterKey,
@@ -32,7 +32,8 @@ function loadDoneMap(): Record<string, boolean> {
 type Prefs = {
   filter: FilterKey
   hideClosed: boolean
-  frontendOnly: boolean
+  includeKeywords: string
+  excludeKeywords: string
 }
 
 function loadPrefs(): Prefs {
@@ -43,13 +44,15 @@ function loadPrefs(): Prefs {
     return {
       filter,
       hideClosed: raw.hideClosed ?? true,
-      frontendOnly: raw.frontendOnly ?? false,
+      includeKeywords: raw.includeKeywords ?? '',
+      excludeKeywords: raw.excludeKeywords ?? '',
     }
   } catch {
     return {
       filter: EFilterKey.All,
       hideClosed: true,
-      frontendOnly: false,
+      includeKeywords: '',
+      excludeKeywords: '',
     }
   }
 }
@@ -69,7 +72,8 @@ type ReportState = {
   filter: FilterKey
   query: string
   hideClosed: boolean
-  frontendOnly: boolean
+  includeKeywords: string
+  excludeKeywords: string
   showSetup: boolean
   doneMap: Record<string, boolean>
   progressStage: ProgressStage | null
@@ -77,7 +81,7 @@ type ReportState = {
   progressCurrent: number
   progressTotal: number
   progressLogs: ProgressLogItem[]
-  progressMode: 'sync' | 'upload' | 'boot' | null
+  progressMode: 'sync' | 'upload' | null
 }
 
 type FilterCounts = Record<FilterKey, number>
@@ -108,7 +112,8 @@ export function useReport() {
     filter: prefs.filter,
     query: '',
     hideClosed: prefs.hideClosed,
-    frontendOnly: prefs.frontendOnly,
+    includeKeywords: prefs.includeKeywords,
+    excludeKeywords: prefs.excludeKeywords,
     showSetup: false,
     doneMap: loadDoneMap(),
     progressStage: null,
@@ -123,11 +128,22 @@ export function useReport() {
   let abortController: AbortController | null = null
 
   watch(
-    () => [state.filter, state.hideClosed, state.frontendOnly] as const,
-    ([filter, hideClosed, frontendOnly]) => {
+    () =>
+      [
+        state.filter,
+        state.hideClosed,
+        state.includeKeywords,
+        state.excludeKeywords,
+      ] as const,
+    ([filter, hideClosed, includeKeywords, excludeKeywords]) => {
       localStorage.setItem(
         PREFS_STORAGE_KEY,
-        JSON.stringify({ filter, hideClosed, frontendOnly } satisfies Prefs),
+        JSON.stringify({
+          filter,
+          hideClosed,
+          includeKeywords,
+          excludeKeywords,
+        } satisfies Prefs),
       )
     },
   )
@@ -191,7 +207,7 @@ export function useReport() {
       ) {
         return false
       }
-      if (state.frontendOnly && !isFrontendLead(lead)) {
+      if (!matchesProfile(lead, state.includeKeywords, state.excludeKeywords)) {
         return false
       }
       if (!q) {
@@ -295,11 +311,11 @@ export function useReport() {
     return Boolean(state.doneMap[id])
   }
 
+  /**
+   * Тихая проверка сессии — без панели прогресса.
+   */
   async function bootstrap(): Promise<void> {
-    state.loading = true
     state.error = ''
-    state.progressMode = 'boot'
-    state.progressMessage = 'Проверяю сохранённую сессию…'
     try {
       const report = await fetchReport()
       state.report = report
@@ -308,10 +324,6 @@ export function useReport() {
       }
     } catch (err) {
       state.error = err instanceof Error ? err.message : String(err)
-    } finally {
-      state.loading = false
-      state.progressMode = null
-      state.progressMessage = ''
     }
   }
 

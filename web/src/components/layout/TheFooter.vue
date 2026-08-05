@@ -2,7 +2,6 @@
 /**
  * Футер: контакты и дата.
  */
-const AUTHOR_NAME = 'Кирилл Корнеев'
 const AUTHOR_EMAIL = 'krllkrnv@yandex.ru'
 const AUTHOR_TELEGRAM = 'kkorneev02'
 const AUTHOR_GITHUB = 'krllkrnv'
@@ -18,14 +17,11 @@ const todayIso = now.toISOString().slice(0, 10)
 
 <template>
   <footer :class="$style.TheFooter">
-    <div :class="$style.author">
-      <span :class="$style.name">{{ AUTHOR_NAME }}</span>
-      <span :class="$style.sep" aria-hidden="true">·</span>
+    <div :class="$style.contacts">
       <a :class="$style.link" :href="`mailto:${AUTHOR_EMAIL}`">
         {{ AUTHOR_EMAIL }}
       </a>
-    </div>
-    <div :class="$style.links">
+      <span :class="$style.sep" aria-hidden="true">·</span>
       <a
         :class="$style.link"
         :href="`https://t.me/${AUTHOR_TELEGRAM}`"
@@ -43,9 +39,8 @@ const todayIso = now.toISOString().slice(0, 10)
       >
         GitHub
       </a>
-      <span :class="$style.sep" aria-hidden="true">·</span>
-      <time :class="$style.date" :datetime="todayIso">{{ todayLabel }}</time>
     </div>
+    <time :class="$style.date" :datetime="todayIso">{{ todayLabel }}</time>
   </footer>
 </template>
 
@@ -57,35 +52,27 @@ const todayIso = now.toISOString().slice(0, 10)
   flex-wrap: wrap;
   justify-content: space-between;
   gap: var(--space-3);
-  border-top: 0.0625rem solid var(--color-line);
 }
 
-.author,
-.links {
+.contacts {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.35rem 0.5rem;
 }
 
-.name {
-  @include text(caption);
-  font-weight: 600;
-  color: var(--color-ink);
-}
-
 .link {
   @include text(caption);
-  color: var(--color-muted);
+  color: var(--color-faint);
   text-decoration: none;
 
-  &:hover {
-    color: var(--color-ink);
+  @include hover {
+    color: var(--color-accent);
   }
 }
 
 .sep {
-  color: var(--color-line-strong);
+  color: var(--color-line);
 }
 
 .date {

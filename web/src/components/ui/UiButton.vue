@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Кнопка UI-kit: primary / ghost / danger, размеры, loading.
+ * Кнопка: фон на ::after, morph radius на hover.
  */
 import { computed, useCssModule } from 'vue'
 import { EButtonSize, EButtonVariant } from '@/types/report'
@@ -71,32 +71,44 @@ function handleClick(event: MouseEvent): void {
 
 <style module lang="scss">
 .UiButton {
-  --size: 2.875rem;
+  --size: 2.75rem;
 
   appearance: none;
+  position: relative;
+  z-index: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-height: var(--size);
-  padding: 0 1.25rem;
-  border: 0.0625rem solid transparent;
-  border-radius: var(--radius);
+  padding: 0 1.35rem;
+  border: 0;
+  background: transparent;
   cursor: pointer;
+  user-select: none;
+  isolation: isolate;
   @include text(button);
-  transition:
-    background-color var(--dur) var(--ease),
-    border-color var(--dur) var(--ease),
-    color var(--dur) var(--ease),
-    opacity var(--dur) var(--ease);
+  transition: color var(--dur) var(--ease), opacity var(--dur) var(--ease);
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: var(--radius);
+    transition:
+      background-color var(--dur) var(--ease),
+      border-radius var(--dur) var(--ease),
+      border-color var(--dur) var(--ease);
+  }
 
   &._small {
     --size: 2.25rem;
-    padding: 0 0.9rem;
-    font-size: 0.8125rem;
+    padding: 0 1rem;
+    font-size: 0.75rem;
   }
 
   &._medium {
-    --size: 2.875rem;
+    --size: 2.75rem;
   }
 
   &._fullWidth {
@@ -104,36 +116,62 @@ function handleClick(event: MouseEvent): void {
   }
 
   &._primary {
-    background: var(--color-accent);
     color: var(--color-accent-text);
 
-    &:hover:not(:disabled) {
-      background: var(--color-accent-hover);
+    &::after {
+      background: var(--color-accent);
+    }
+
+    @include hover {
+      color: var(--color-accent-text);
+
+      &::after {
+        background: var(--color-accent-hover);
+        border-radius: var(--radius-hover);
+      }
+    }
+
+    &:active::after {
+      background: var(--color-accent-deep);
     }
   }
 
   &._ghost {
-    background: transparent;
-    border-color: var(--color-line);
-    color: var(--color-ink);
+    color: var(--color-muted);
 
-    &:hover:not(:disabled) {
-      border-color: var(--color-accent);
-      color: var(--color-accent);
-      background: var(--color-accent-soft);
+    &::after {
+      background: transparent;
+      border: 0.0625rem solid var(--color-line-strong);
+    }
+
+    @include hover {
+      color: var(--color-ink);
+
+      &::after {
+        background: var(--color-raised);
+        border-color: var(--color-line-strong);
+        border-radius: var(--radius-hover);
+      }
     }
   }
 
   &._danger {
-    background: var(--color-danger-soft);
-    border-color: var(--color-danger);
     color: var(--color-danger);
+
+    &::after {
+      background: var(--color-danger-soft);
+      border: 0.0625rem solid var(--color-danger);
+    }
   }
 
   &._disabled,
   &:disabled {
-    opacity: 0.42;
+    opacity: 0.45;
     cursor: not-allowed;
+
+    &::after {
+      border-radius: var(--radius) !important;
+    }
   }
 
   &._loading .label {
@@ -142,8 +180,9 @@ function handleClick(event: MouseEvent): void {
 }
 
 .label {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.5rem;
 }
 </style>

@@ -31,50 +31,53 @@
 }
 
 :root {
-  /* Dark neutrals; HH red only on brand mark. */
-  --color-void: #0a0e12;
-  --color-bg: #0d1319;
-  --color-panel: #141517;
-  --color-raised: #1c1d1e;
-  --color-line: #2a2e33;
-  --color-line-strong: #3c4044;
+  --color-void: #0c0d0e;
+  --color-bg: #161718;
+  --color-panel: #1f2123;
+  --color-raised: #272a2d;
+  --color-line: #363a3f;
+  --color-line-strong: #4a5056;
 
-  --color-ink: #f3f3f4;
-  --color-muted: #9a9da2;
-  --color-faint: #7a7d81;
+  --color-ink: #f7f7f7;
+  --color-muted: #a6b1b9;
+  --color-faint: #6c757d;
 
-  --color-accent: #3d7eff;
-  --color-accent-hover: #5b93ff;
-  --color-accent-soft: rgb(61 126 255 / 14%);
-  --color-accent-text: #ffffff;
+  --color-accent: #83c5ff;
+  --color-accent-hover: #a8d7ff;
+  --color-accent-deep: #0060b2;
+  --color-accent-soft: rgb(131 197 255 / 14%);
+  --color-accent-text: #00335f;
+
   --color-hh: #d6001c;
 
-  --color-danger: #e86a6a;
-  --color-danger-soft: rgb(232 106 106 / 12%);
-  --color-warning: #e0a43a;
-  --color-warning-soft: rgb(224 164 58 / 12%);
-  --color-success: #3cb88a;
-  --color-success-soft: rgb(60 184 138 / 12%);
+  --color-danger: #ed5e64;
+  --color-danger-soft: rgb(237 94 100 / 14%);
+  --color-warning: #fdd029;
+  --color-warning-soft: rgb(253 208 41 / 12%);
+  --color-success: #33b580;
+  --color-success-soft: rgb(51 181 128 / 14%);
 
-  --color-focus: rgb(61 126 255 / 35%);
+  --color-focus: rgb(131 197 255 / 40%);
 
   --rail-reply: var(--color-danger);
   --rail-call: var(--color-warning);
   --rail-interview: var(--color-success);
-  --rail-test: var(--color-accent);
-  --rail-invite: #8b9098;
-  --rail-wait: #6b7280;
-  --rail-bot: #5a5f66;
-  --rail-discuss: #4b5563;
+  --rail-test: var(--color-accent-deep);
+  --rail-invite: #a6b1b9;
+  --rail-wait: #6c757d;
+  --rail-bot: #5a6168;
+  --rail-discuss: #484f55;
   --rail-closed: var(--color-faint);
 
-  --font-display: "Manrope", system-ui, sans-serif;
-  --font-sans: "Manrope", system-ui, sans-serif;
-  --font-mono: "Manrope", system-ui, sans-serif;
+  --font-display: "Manrope", sans-serif;
+  --font-sans: "Manrope", sans-serif;
+  --font-mono: "Manrope", sans-serif;
 
   --radius-sm: 0.25rem;
   --radius: 0.5rem;
   --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --radius-hover: 1.3125rem;
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -83,13 +86,17 @@
   --space-5: 1.5rem;
   --space-6: 2rem;
   --space-7: 3rem;
-  --space-8: 4.5rem;
+  --space-8: 4rem;
 
   --shadow-focus: 0 0 0 0.125rem var(--color-focus);
+  --shadow-dock: 0 -0.75rem 2.5rem rgb(0 0 0 / 45%);
   --ease: cubic-bezier(0.12, 1, 0.48, 1);
   --dur: 240ms;
-  --content-w: 72rem;
-  --header-h: 4.25rem;
+  --dur-fast: 160ms;
+  --dur-slow: 480ms;
+  --content-w: 70rem;
+  --header-h: 4.5rem;
+  --dock-pad: 0;
 }
 
 *,
@@ -108,12 +115,16 @@ body {
   margin: 0;
   min-height: 100dvh;
   font-family: var(--font-sans);
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   font-weight: 400;
-  line-height: 1.45;
-  letter-spacing: -0.01em;
+  line-height: 1.43;
+  letter-spacing: 0.005em;
   color: var(--color-ink);
-  background: var(--color-bg);
+  background:
+    radial-gradient(ellipse 80% 50% at 12% -10%, rgb(131 197 255 / 9%), transparent 55%),
+    radial-gradient(ellipse 55% 40% at 92% 8%, rgb(214 0 28 / 6%), transparent 50%),
+    linear-gradient(180deg, #121314 0%, var(--color-bg) 28%, var(--color-bg) 100%);
+  background-attachment: fixed;
 }
 
 button,
@@ -139,8 +150,8 @@ a:hover {
 }
 
 ::selection {
-  background: var(--color-accent);
-  color: var(--color-accent-text);
+  background: var(--color-accent-deep);
+  color: #fff;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -156,7 +167,7 @@ a:hover {
 @keyframes fadeUp {
   from {
     opacity: 0;
-    transform: translateY(0.4rem);
+    transform: translateY(0.35rem);
   }
 
   to {

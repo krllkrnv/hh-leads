@@ -27,9 +27,11 @@ withDefaults(
 .BrandTitle {
   margin: 0;
   color: var(--color-ink);
+  letter-spacing: -0.02em;
 
   &._display {
     @include text(display);
+    letter-spacing: -0.03em;
   }
 
   &._h1 {
@@ -43,5 +45,6 @@ withDefaults(
 
 .rest {
   color: inherit;
+  font-weight: 500;
 }
 </style>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Текстовое поле UI-kit с v-model.
+ * Поле ввода: raised fill, soft border on focus.
  */
 import { computed, useCssModule } from 'vue'
 
@@ -68,26 +68,30 @@ function handleInput(event: Event): void {
 <style module lang="scss">
 .UiTextInput {
   width: 100%;
-  min-height: 2.875rem;
-  padding: 0.55rem 0.85rem;
-  border: 0.0625rem solid var(--color-line);
+  min-height: 3rem;
+  padding: 0.7rem 1rem;
+  border: 0.0625rem solid transparent;
   border-radius: var(--radius);
   background: var(--color-raised);
   color: var(--color-ink);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: 0.005em;
   transition: border-color var(--dur) var(--ease);
 
   &::placeholder {
-    color: var(--color-faint);
+    color: var(--color-muted);
+    font-weight: 400;
   }
 
-  &:hover:not(:disabled) {
-    border-color: var(--color-line-strong);
+  @include hover {
+    border-color: var(--color-line);
   }
 
   &:focus {
     outline: none;
-    border-color: var(--color-accent);
-    box-shadow: var(--shadow-focus);
+    border-color: var(--color-line-strong);
   }
 
   &._invalid {

@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from classify import ChatRecord, classify, extract_messages, extract_meta
-from hh_client import ChatikClient
+from hh_client import ChatikClient, suggest_hh_host_from_cookie
 from progress import ProgressCb, emit
 
 
@@ -45,7 +45,9 @@ def fetch_records(
     emit(on_progress, "start", f"Старт синхронизации за последние {days} дн.")
     emit(on_progress, "auth", "Проверяю cookie и подключаюсь к Chatik…")
 
-    with ChatikClient(cookie, delay=delay, hh_host=hh_host) as client:
+    resolved_host = (hh_host or "").strip() or suggest_hh_host_from_cookie(cookie)
+
+    with ChatikClient(cookie, delay=delay, hh_host=resolved_host) as client:
         if cancelled():
             raise RuntimeError("Синхронизация отменена")
 

@@ -26,26 +26,178 @@ class HhApiError(Exception):
     """Ошибка ответа Chatik API."""
 
 
-def normalize_cookie(raw: str) -> str:
+_COOKIE_META = frozenset(
+    {
+        "domain",
+        "expires",
+        "path",
+        "samesite",
+        "secure",
+        "httponly",
+        "hostonly",
+        "value",
+        "size",
+        "priority",
+        "sameparty",
+        "partitioned",
+    }
+)
+
+_COOKIE_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+def _strip_wrapping_quotes(text: str) -> str:
+    value = text.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        return value[1:-1]
+    return value
+
+
+def _is_cookie_name(name: str) -> bool:
+    key = name.strip()
+    if not key or key.lower() in _COOKIE_META:
+        return False
+    return bool(_COOKIE_NAME_RE.match(key))
+
+
+def parse_cookie_map(raw: str) -> dict[str, str]:
+    """
+    Достаёт пары cookie из разных форматов вставки:
+    - заголовок Cookie: hhtoken=…; _xsrf=…
+    - таблица Application → Cookies (name / value / domain…)
+    - строки name\\tvalue
+    """
     text = raw.strip()
+    if not text:
+        return {}
+
     if text.lower().startswith("cookie:"):
         text = text.split(":", 1)[1].strip()
-    if (text.startswith('"') and text.endswith('"')) or (
-        text.startswith("'") and text.endswith("'")
+    text = _strip_wrapping_quotes(text)
+
+    found: dict[str, str] = {}
+
+    def put(name: str, value: str) -> None:
+        key = name.strip()
+        val = _strip_wrapping_quotes(value)
+        if not _is_cookie_name(key) or not val:
+            return
+        # Не затираем уже найденный непустой токен более коротким мусором
+        if key in found and len(found[key]) >= len(val):
+            return
+        found[key] = val
+
+    # 1) Классика: key=value; key=value (в т.ч. с переносами)
+    for part in re.split(r"[;\n\r]+", text):
+        part = part.strip()
+        if not part or "=" not in part:
+            continue
+        key, val = part.split("=", 1)
+        key = key.strip()
+        # Отсекаем meta-строки дампа (domain=.hh.ru)
+        if key.lower() in _COOKIE_META:
+            continue
+        if "\t" in key or " " in key:
+            continue
+        put(key, val)
+
+    # 2) Строки name<TAB>value / name<TAB>"value"
+    for match in re.finditer(
+        r'(?m)^([A-Za-z0-9_.-]+)\t+"?([^\t\n\r"]+)"?\s*$',
+        text,
     ):
-        text = text[1:-1]
-    return text.strip()
+        put(match.group(1), match.group(2))
+
+    # 3) Дамп Storage: имя cookie, ниже блок domain/path/value
+    lines = [line.strip() for line in text.splitlines()]
+    for index, line in enumerate(lines):
+        if not _is_cookie_name(line):
+            continue
+        for look in range(index + 1, min(index + 10, len(lines))):
+            nxt = lines[look]
+            if not nxt:
+                continue
+            value_match = re.match(r'^value\t+"?(.*?)"?\s*$', nxt, flags=re.IGNORECASE)
+            if value_match:
+                put(line, value_match.group(1))
+                break
+            # Следующее имя cookie без meta — блок закончился
+            if _is_cookie_name(nxt) and nxt.lower() not in _COOKIE_META:
+                break
+            eq_match = re.match(r'^value\s*[:=]\s*"?(.*?)"?\s*$', nxt, flags=re.IGNORECASE)
+            if eq_match:
+                put(line, eq_match.group(1))
+                break
+
+    # 4) Запасной regex по ключевым полям
+    for name in ("hhtoken", "_xsrf", "hhuid", "_hi", "crypted_id", "hhrole", "redirect_host"):
+        if name in found:
+            continue
+        match = re.search(
+            rf'(?im)(?:^|[\s;]){re.escape(name)}\s*[=\t:]\s*"?([^\s";]+)"?',
+            text,
+        )
+        if match:
+            put(name, match.group(1))
+
+    return found
+
+
+def normalize_cookie(raw: str) -> str:
+    """Приводит любой вставленный дамп к строке Cookie-заголовка."""
+    mapping = parse_cookie_map(raw)
+    if not mapping:
+        text = raw.strip()
+        if text.lower().startswith("cookie:"):
+            text = text.split(":", 1)[1].strip()
+        return _strip_wrapping_quotes(text)
+
+    preferred = (
+        "hhtoken",
+        "_xsrf",
+        "hhuid",
+        "_hi",
+        "crypted_id",
+        "hhrole",
+        "redirect_host",
+    )
+    parts: list[str] = []
+    seen: set[str] = set()
+    for key in preferred:
+        if key in mapping:
+            parts.append(f"{key}={mapping[key]}")
+            seen.add(key)
+    for key, value in mapping.items():
+        if key in seen:
+            continue
+        parts.append(f"{key}={value}")
+    return "; ".join(parts)
 
 
 def cookie_value(cookie: str, name: str) -> str:
+    # Сначала как готовая Cookie-строка
     for part in cookie.split(";"):
         part = part.strip()
         if not part or "=" not in part:
             continue
         key, val = part.split("=", 1)
         if key.strip() == name:
-            return unquote(val.strip())
+            return unquote(_strip_wrapping_quotes(val))
+    # Если передали сырой дамп до normalize
+    mapped = parse_cookie_map(cookie)
+    if name in mapped:
+        return unquote(mapped[name])
     return ""
+
+
+def suggest_hh_host_from_cookie(cookie: str) -> str | None:
+    """Достаёт redirect_host / region_clarified из cookie, если есть."""
+    mapping = parse_cookie_map(cookie)
+    for key in ("redirect_host", "region_clarified"):
+        host = mapping.get(key, "").strip()
+        if host:
+            return normalize_hh_host(host)
+    return None
 
 
 def parse_dt(value: Any) -> datetime | None:
@@ -94,9 +246,15 @@ class ChatikClient:
         self.hh_host = normalize_hh_host(hh_host)
         self.xsrf = cookie_value(self.cookie, "_xsrf")
         if not cookie_value(self.cookie, "hhtoken"):
-            raise HhAuthError("В cookie нет hhtoken. Скопируйте Cookie после входа на hh.ru.")
+            raise HhAuthError(
+                "Не нашли hhtoken во вставленном тексте. "
+                "Скопируй cookie из Application → Cookies или строку Cookie из Network."
+            )
         if not self.xsrf:
-            raise HhAuthError("В cookie нет _xsrf. Скопируйте Cookie после входа на hh.ru.")
+            raise HhAuthError(
+                "Не нашли _xsrf во вставленном тексте. "
+                "Нужны и hhtoken, и _xsrf — вставь дамп целиком."
+            )
 
         self._client = httpx.Client(
             base_url=CHATIK_BASE,
