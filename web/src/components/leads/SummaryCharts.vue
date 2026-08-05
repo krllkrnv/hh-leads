@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Сводка метрик и метаданных отчёта.
+ * Сводка по метрикам отчёта: сколько чатов, ответов, приглашений и откуда данные.
  */
 import { computed } from 'vue'
 import type { ReportMeta } from '@/types/report'
@@ -63,7 +63,7 @@ const sourceLabel = computed(() => {
     return 'Синхронизация с hh.ru'
   }
   if (props.meta.source === 'upload') {
-    return 'Загрузка файла'
+    return 'Открыт из файла'
   }
   return props.meta.source
 })

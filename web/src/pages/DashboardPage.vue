@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Главная: setup или дашборд лидов.
+ * Главная страница: сначала экран загрузки, потом дашборд с очередями лидов.
  */
 import { onMounted } from 'vue'
 import type { FilterKey } from '@/types/report'
@@ -36,28 +36,28 @@ onMounted(() => {
 })
 
 /**
- * Синхронизация по cookie из SetupPanel.
+ * Запускает синхронизацию чатов по cookie из формы входа.
  */
 async function onSync(payload: { cookie: string; days: number; hhHost: string }): Promise<void> {
   await runSync(payload.cookie, payload.days, payload.hhHost)
 }
 
 /**
- * Загрузка файла отчёта.
+ * Разбирает загруженный Excel или JSON и показывает его как отчёт.
  */
 async function onUpload(file: File): Promise<void> {
   await runUpload(file)
 }
 
 /**
- * Смена активной очереди.
+ * Переключает активную очередь лидов на вкладке.
  */
 function onFilter(value: FilterKey): void {
   state.filter = value
 }
 
 /**
- * Сброс сессии и возврат на setup.
+ * Сбрасывает серверную сессию и возвращает на экран загрузки.
  */
 async function onReset(): Promise<void> {
   await reset()
@@ -77,13 +77,18 @@ async function onReset(): Promise<void> {
 
     <template v-if="state.report && !state.showSetup">
       <TheAppBar
-        subtitle="Фильтры и список из вашего отчёта"
+        subtitle="Ниже — лиды из последней загрузки"
         show-actions
         :loading="state.loading"
         @refresh="openSetup"
         @export="exportReport"
         @reset="onReset"
       />
+
+      <p v-if="meta?.incomplete" :class="$style.warn" role="status">
+        Синхронизацию остановили раньше времени, поэтому в отчёте только часть чатов. Нажмите
+        «Загрузить заново», чтобы дотянуть остальные.
+      </p>
 
       <div :class="$style.workspace">
         <SummaryCharts v-if="meta" :meta="meta" />
@@ -151,6 +156,15 @@ async function onReset(): Promise<void> {
   border-radius: var(--radius);
   background: var(--color-danger-soft);
   color: var(--color-danger);
+  @include text(caption);
+}
+
+.warn {
+  margin: var(--space-3) 0 0;
+  padding: 0.85rem 1.1rem;
+  border-radius: var(--radius);
+  background: var(--color-accent-soft);
+  color: var(--color-ink);
   @include text(caption);
 }
 </style>

@@ -3,22 +3,23 @@ import type { ProgressEvent } from '@/types/progress'
 import { SESSION_STORAGE_KEY } from '@/types/report'
 
 /**
- * Возвращает id серверной сессии из sessionStorage.
+ * Возвращает id серверной сессии из sessionStorage браузера.
  */
 export function getSessionId(): string | null {
   return sessionStorage.getItem(SESSION_STORAGE_KEY)
 }
 
 /**
- * Сохраняет id серверной сессии.
- * @param id - идентификатор сессии
+ * Сохраняет id серверной сессии в sessionStorage.
+ * @param id - идентификатор сессии на API
  */
 export function setSessionId(id: string): void {
   sessionStorage.setItem(SESSION_STORAGE_KEY, id)
 }
 
 /**
- * Гарантирует наличие session id до старта job (для cancel).
+ * Гарантирует, что session id уже есть до старта синхронизации —
+ * иначе кнопка «Остановить» не сможет сказать серверу, какую задачу отменить.
  */
 export function ensureSessionId(): string {
   const existing = getSessionId()
@@ -37,7 +38,7 @@ function secretsToken(): string {
 }
 
 /**
- * Удаляет id серверной сессии.
+ * Удаляет id серверной сессии из sessionStorage.
  */
 export function clearSessionId(): void {
   sessionStorage.removeItem(SESSION_STORAGE_KEY)
@@ -56,16 +57,50 @@ async function readError(res: Response): Promise<string> {
   try {
     const data: { detail?: string | unknown } = await res.json()
     if (data?.detail) {
-      return typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)
+      const detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)
+      return humanizeError(detail)
     }
   } catch {
     /* ignore non-json */
   }
-  return res.statusText || `HTTP ${res.status}`
+  if (res.status === 401) {
+    return 'Сессия hh больше не действует. Скопируйте cookie из браузера заново.'
+  }
+  if (res.status === 413) {
+    return 'Файл слишком большой. Максимум 15 МБ.'
+  }
+  if (res.status >= 500) {
+    return 'Сервер не смог обработать запрос. Попробуйте ещё раз.'
+  }
+  return 'Не удалось выполнить запрос. Попробуйте ещё раз.'
 }
 
 /**
- * Читает NDJSON-стрим и вызывает onEvent на каждое событие.
+ * Переводит технические тексты ошибок в короткие понятные сообщения.
+ */
+export function humanizeError(raw: string): string {
+  const text = raw.trim()
+  if (!text) {
+    return 'Что-то пошло не так. Попробуйте ещё раз.'
+  }
+  if (/сессия|cookie|недействительн|auth|401/i.test(text)) {
+    return 'Сессия hh больше не действует. Скопируйте cookie из браузера заново и загрузите чаты ещё раз.'
+  }
+  if (/429|temporary|502|503|504|network|не отвечает/i.test(text)) {
+    return 'hh сейчас не отвечает. Подождите немного и попробуйте снова.'
+  }
+  if (/отмен|остановил/i.test(text)) {
+    return text
+  }
+  // Уже нормальный русский текст от нашего API — показываем как есть.
+  if (/[а-яё]/i.test(text) && !/Chatik|Traceback|HTTP \d|Sync failed|NDJSON|stack/i.test(text)) {
+    return text.length > 220 ? `${text.slice(0, 217)}…` : text
+  }
+  return 'Не удалось загрузить данные. Проверьте cookie и попробуйте ещё раз.'
+}
+
+/**
+ * Читает поток прогресса в формате NDJSON и вызывает onEvent на каждое событие.
  */
 async function readNdjsonStream(
   res: Response,
@@ -80,6 +115,7 @@ async function readNdjsonStream(
   let buffer = ''
   let report: Report | null = null
   let streamError: string | null = null
+  let streamStatus: number | undefined
 
   try {
     while (true) {
@@ -110,7 +146,8 @@ async function readNdjsonStream(
           report = event.report
         }
         if (event.type === 'error') {
-          streamError = event.message || 'Ошибка синхронизации'
+          streamError = event.message || 'Не удалось завершить синхронизацию'
+          streamStatus = event.status
         }
       }
     }
@@ -132,24 +169,27 @@ async function readNdjsonStream(
         report = event.report
       }
       if (event.type === 'error') {
-        streamError = event.message || 'Ошибка синхронизации'
+        streamError = event.message || 'Не удалось завершить синхронизацию'
+        streamStatus = event.status
       }
     } catch {
-      /* ignore trailing junk */
+      /* trailing junk */
     }
   }
 
   if (streamError) {
-    throw new Error(streamError)
+    const err = new Error(humanizeError(streamError)) as Error & { status?: number }
+    err.status = streamStatus
+    throw err
   }
   if (!report) {
-    throw new Error('Стрим завершился без отчёта')
+    throw new Error('Не удалось получить отчёт. Попробуйте загрузить чаты ещё раз.')
   }
   return report
 }
 
 /**
- * Загружает текущий отчёт сессии. Без session id возвращает null.
+ * Загружает текущий отчёт сессии с сервера. Без session id возвращает null.
  */
 export async function fetchReport(): Promise<Report | null> {
   const sid = getSessionId()
@@ -179,7 +219,7 @@ type SyncPayload = {
 }
 
 /**
- * Синхронизирует чаты со стримом прогресса.
+ * Синхронизирует чаты с hh и стримит прогресс в onEvent.
  */
 export async function syncReportStream(
   payload: SyncPayload,
@@ -196,7 +236,7 @@ export async function syncReportStream(
 }
 
 /**
- * Загружает файл со стримом прогресса.
+ * Загружает файл отчёта и стримит прогресс разбора в onEvent.
  */
 export async function uploadReportStream(
   file: File,
@@ -215,7 +255,22 @@ export async function uploadReportStream(
 }
 
 /**
- * Просит сервер остановить текущую синхронизацию.
+ * Скачивает Excel-отчёт текущей сессии с сервера.
+ */
+export async function downloadReportExcel(): Promise<{ blob: Blob; filename: string }> {
+  const res = await fetch('/api/report/excel', { headers: headers() })
+  if (!res.ok) {
+    throw new Error(await readError(res))
+  }
+  const blob = await res.blob()
+  const disposition = res.headers.get('Content-Disposition') || ''
+  const match = disposition.match(/filename="?([^";]+)"?/i)
+  const filename = match?.[1] || `hh-leads-${Date.now()}.xlsx`
+  return { blob, filename }
+}
+
+/**
+ * Просит сервер остановить текущую синхронизацию для этой сессии.
  */
 export async function cancelSync(): Promise<void> {
   const sid = getSessionId()
@@ -229,7 +284,7 @@ export async function cancelSync(): Promise<void> {
 }
 
 /**
- * Очищает серверную сессию и локальный session id.
+ * Удаляет отчёт на сервере и забывает локальный session id.
  */
 export async function clearServerSession(): Promise<void> {
   const sid = getSessionId()

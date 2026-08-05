@@ -28,6 +28,7 @@ export type ReportMeta = {
   days: number
   exportedAt: string
   source: string
+  incomplete?: boolean
   total: number
   invites: number
   tests: number
@@ -63,7 +64,6 @@ export type Report = {
     bot?: Lead[]
     closed: Lead[]
   }
-  records?: Lead[]
 }
 
 export enum EFilterKey {
@@ -89,13 +89,6 @@ export enum EButtonVariant {
 export enum EButtonSize {
   Small = 'small',
   Medium = 'medium',
-}
-
-export enum EStatTone {
-  Default = 'default',
-  Warning = 'warning',
-  Danger = 'danger',
-  Success = 'success',
 }
 
 export const FILTER_LABELS: Record<FilterKey, string> = {

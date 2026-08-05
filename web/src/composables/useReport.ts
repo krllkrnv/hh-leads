@@ -2,8 +2,10 @@ import { computed, reactive, watch } from 'vue'
 import {
   cancelSync,
   clearServerSession,
+  downloadReportExcel,
   ensureSessionId,
   fetchReport,
+  humanizeError,
   syncReportStream,
   uploadReportStream,
 } from '@/api/reportRepo'
@@ -98,7 +100,8 @@ const EMPTY_COUNTS: FilterCounts = {
 const MAX_LOGS = 120
 
 /**
- * Состояние отчёта: sync/upload, фильтры очередей, локальные «сделано».
+ * Состояние дашборда: синхронизация и загрузка файла, фильтры очередей,
+ * локальные отметки «разобрано» в браузере.
  */
 export function useReport() {
   const prefs = loadPrefs()
@@ -209,7 +212,7 @@ export function useReport() {
   function resetProgress(mode: ReportState['progressMode']): void {
     state.progressMode = mode
     state.progressStage = 'start'
-    state.progressMessage = mode === 'upload' ? 'Готовлю загрузку файла…' : 'Готовлю синхронизацию…'
+    state.progressMessage = mode === 'upload' ? 'Готовлю разбор файла…' : 'Готовлю синхронизацию с hh…'
     state.progressCurrent = 0
     state.progressTotal = 0
     state.progressLogs = []
@@ -265,15 +268,19 @@ export function useReport() {
       if (state.progressTotal > 0) {
         state.progressCurrent = state.progressTotal
       }
-      pushLog({
-        stage: 'done',
-        message: event.message || 'Готово',
-      })
+      // Не пишем «Готово» второй раз, если такое сообщение уже есть в логе прогресса.
+      const last = state.progressLogs[state.progressLogs.length - 1]
+      if (!last || last.stage !== 'done') {
+        pushLog({
+          stage: 'done',
+          message: event.message || 'Готово',
+        })
+      }
     }
   }
 
   /**
-   * Удаляет из doneMap id, которых нет в текущем отчёте.
+   * Убирает из локальных отметок «разобрано» id, которых больше нет в новом отчёте.
    */
   function pruneDoneMap(report: Report): void {
     const ids = new Set(report.leads.all.map((lead) => lead.id))
@@ -288,7 +295,7 @@ export function useReport() {
   }
 
   /**
-   * Сохраняет чекбокс «сделано» в localStorage.
+   * Запоминает в localStorage, отмечен ли лид как разобранный.
    */
   function setDone(id: string, value: boolean): void {
     state.doneMap = { ...state.doneMap, [id]: value }
@@ -300,7 +307,7 @@ export function useReport() {
   }
 
   /**
-   * Тихая проверка сессии — без панели прогресса.
+   * Тихо подтягивает сохранённый отчёт сессии при открытии страницы, без панели прогресса.
    */
   async function bootstrap(): Promise<void> {
     state.error = ''
@@ -311,7 +318,7 @@ export function useReport() {
         pruneDoneMap(report)
       }
     } catch (err) {
-      state.error = err instanceof Error ? err.message : String(err)
+      state.error = humanizeError(err instanceof Error ? err.message : String(err))
     }
   }
 
@@ -336,11 +343,18 @@ export function useReport() {
       state.showSetup = false
     } catch (err) {
       if (abortController?.signal.aborted) {
-        state.error = 'Синхронизация остановлена'
+        state.error =
+          'Синхронизацию остановили. Уже разобранные чаты могли сохраниться как частичный отчёт.'
       } else {
-        state.error = err instanceof Error ? err.message : String(err)
+        const status = (err as Error & { status?: number }).status
+        const raw = err instanceof Error ? err.message : String(err)
+        if (status === 401) {
+          state.error =
+            'Сессия hh больше не действует. Скопируйте cookie из браузера заново и загрузите чаты ещё раз.'
+        } else {
+          state.error = humanizeError(raw)
+        }
       }
-      throw err
     } finally {
       state.loading = false
       abortController = null
@@ -360,11 +374,11 @@ export function useReport() {
       state.showSetup = false
     } catch (err) {
       if (abortController?.signal.aborted) {
-        state.error = 'Загрузка остановлена'
+        state.error = 'Разбор файла остановили.'
       } else {
-        state.error = err instanceof Error ? err.message : String(err)
+        const raw = err instanceof Error ? err.message : String(err)
+        state.error = humanizeError(raw)
       }
-      throw err
     } finally {
       state.loading = false
       abortController = null
@@ -374,26 +388,42 @@ export function useReport() {
   async function cancelJob(): Promise<void> {
     abortController?.abort()
     await cancelSync()
-    state.progressMessage = 'Останавливаю…'
+    state.progressMessage = 'Останавливаю текущую загрузку…'
   }
 
   /**
-   * Скачивает текущий отчёт как JSON.
+   * Скачивает текущий отчёт: JSON в браузере или Excel с сервера.
    */
-  function exportReport(): void {
+  async function exportReport(format: 'json' | 'xlsx' = 'json'): Promise<void> {
     if (!state.report) {
       return
     }
-    const blob = new Blob([JSON.stringify(state.report, null, 2)], {
-      type: 'application/json',
-    })
-    const url = URL.createObjectURL(blob)
     const stamp = state.report.meta.exportedAt.replace(/[^\d]/g, '').slice(0, 12) || 'report'
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `hh-leads-${stamp}.json`
-    a.click()
-    URL.revokeObjectURL(url)
+
+    if (format === 'json') {
+      const blob = new Blob([JSON.stringify(state.report, null, 2)], {
+        type: 'application/json',
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `hh-leads-${stamp}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      return
+    }
+
+    try {
+      const { blob, filename } = await downloadReportExcel()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename || `hh-leads-${stamp}.xlsx`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      state.error = humanizeError(err instanceof Error ? err.message : String(err))
+    }
   }
 
   function openSetup(): void {

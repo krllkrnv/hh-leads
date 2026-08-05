@@ -57,17 +57,37 @@
   --color-success: #33b580;
   --color-success-soft: rgb(51 181 128 / 14%);
 
+  /* Отдельные оттенки для плашек лидов */
+  --color-tag-reply: #ed5e64;
+  --color-tag-reply-soft: rgb(237 94 100 / 14%);
+  --color-tag-call: #f5a524;
+  --color-tag-call-soft: rgb(245 165 36 / 14%);
+  --color-tag-interview: #33b580;
+  --color-tag-interview-soft: rgb(51 181 128 / 14%);
+  --color-tag-test: #83c5ff;
+  --color-tag-test-soft: rgb(131 197 255 / 14%);
+  --color-tag-invite: #c9a0ff;
+  --color-tag-invite-soft: rgb(201 160 255 / 14%);
+  --color-tag-wait: #8fa8b8;
+  --color-tag-wait-soft: rgb(143 168 184 / 12%);
+  --color-tag-bot: #7d8690;
+  --color-tag-bot-soft: rgb(125 134 144 / 12%);
+  --color-tag-discuss: #a6b1b9;
+  --color-tag-discuss-soft: rgb(166 177 185 / 10%);
+  --color-tag-closed: #9aa3ab;
+  --color-tag-closed-soft: rgb(154 163 171 / 12%);
+
   --color-focus: rgb(131 197 255 / 40%);
 
-  --rail-reply: var(--color-danger);
-  --rail-call: var(--color-warning);
-  --rail-interview: var(--color-success);
-  --rail-test: var(--color-accent-deep);
-  --rail-invite: #a6b1b9;
-  --rail-wait: #6c757d;
-  --rail-bot: #5a6168;
-  --rail-discuss: #484f55;
-  --rail-closed: var(--color-faint);
+  --rail-reply: var(--color-tag-reply);
+  --rail-call: var(--color-tag-call);
+  --rail-interview: var(--color-tag-interview);
+  --rail-test: var(--color-tag-test);
+  --rail-invite: var(--color-tag-invite);
+  --rail-wait: var(--color-tag-wait);
+  --rail-bot: var(--color-tag-bot);
+  --rail-discuss: var(--color-tag-discuss);
+  --rail-closed: var(--color-tag-closed);
 
   --font-display: 'Manrope', sans-serif;
   --font-sans: 'Manrope', sans-serif;

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
-from hh_client import ChatikClient, parse_dt
+from hh_client import ChatikClient, parse_dt, resolve_messages_block
 
 INVITE_PATTERNS = [
     r"приглаша",
@@ -24,14 +24,14 @@ INVITE_PATTERNS = [
     r"телефонн(ое|ого|ый)\s+(интервью|разговор|звонок)",
     r"назнач\w*\s+встреч",
     r"приглас\w*\s+на\s+(собесед|интервью|встреч)",
-    r"позвон\w*",
-    r"перезвон\w*",
+    r"позвон(ите|ить|ю|им)\b",
+    r"перезвон(ите|ить|ю|им)\b",
     r"свяж(итесь|ёмся|емся)",
     r"связаться",
     r"напишите\s+(нам|мне|пожалуйста|когда|в\s)",
     r"\bпишите\s+(нам|мне|в\s+telegram|в\s+телеграм)",
     r"написать\s+(мне|нам|в\s+telegram|в\s+телеграм)",
-    r"жду\s+(ваш\s+)?(звонок|ответ|сообщен)",
+    r"жду\s+(ваш\s+)?звонок",
     r"удобно\s+(ли\s+)?(созвон|позвон|созвониться|позвонить)",
     r"\bтел\.?\s*[:\-]?\s*\+?\d",
     r"\+7[\s\-]?\(?\d{3}\)?[\s\-]?\d",
@@ -41,7 +41,7 @@ INVITE_PATTERNS = [
     r"whats?app|ватсап|вотсап|вацап",
     r"ваши\s+контакт",
     r"оставьте\s+контакт",
-    r"на\s+связи",
+    r"мы\s+на\s+связи",
     r"оста(вьте|вить)\s+(свой\s+)?(номер|телефон|контакт|email|почт)",
     r"ваш(а|у)?\s+(почт|email|номер|телефон)",
     r"скинь(те)?\s+(номер|телефон|контакт)",
@@ -263,8 +263,8 @@ def extract_messages(
     chat = chat_data.get("chat") or {}
     if not my_participant_id:
         my_participant_id = str(chat.get("currentParticipantId") or "") or None
-    messages_block = chat.get("messages") or {}
-    items = messages_block.get("items") or []
+    messages_block, _, _ = resolve_messages_block(chat_data)
+    items = (messages_block or {}).get("items") or []
     out: list[dict[str, Any]] = []
     for msg in items:
         if not isinstance(msg, dict):
@@ -326,11 +326,20 @@ def detect_action(
     messages: list[dict[str, Any]],
     invite_reasons: list[str],
     test_reasons: list[str],
+    *,
+    vacancy_closed: bool = False,
 ) -> tuple[str, str, str]:
+    """Решает, что делать с чатом прямо сейчас.
+
+    Отказ по статусу hh или по тексту работодателя важнее старых приглашений
+    и тестовых в истории переписки.
+    """
     state_id = str(meta.get("state_id") or "").lower()
     last = last_meaningful_message(messages)
+    closed = state_id in ("discard", "hidden") or vacancy_closed
+
     if not last:
-        if state_id in ("discard", "hidden"):
+        if closed:
             return "Отказ / закрыто", "нет сообщений", ""
         return "Без действия", "нет сообщений", ""
 
@@ -343,34 +352,37 @@ def detect_action(
 
     last_text = message_text(last)
     author = message_author(last) or last_from
-    closed = state_id in ("discard", "hidden")
+
+    # Отказ гасит старые приглашения и тесты — иначе отказные чаты висят как «собес».
+    if closed:
+        reason = f"статус {state_id}" if state_id in ("discard", "hidden") else "вакансия закрыта в переписке"
+        return "Отказ / закрыто", f"{reason}; последний: {author}", last_from
 
     if invite_reasons:
         detail = "; ".join(invite_reasons[:3])
-        if closed:
-            detail = f"статус {state_id}; {detail}"
         if last_from == "работодатель":
             return (
                 "Собеседование / встреча",
                 f"нужен ответ или подтверждение · {detail}",
                 last_from,
             )
+        # Вы уже ответили на приглашение — ждём реакцию HR, а не «срочно на собес».
+        if last_from == "я":
+            return "Ждать ответа HR", f"после приглашения · {detail}", last_from
         return (
             "Собеседование / встреча",
-            f"ждём/уже ответили · {detail}",
+            f"приглашение в переписке · {detail}",
             last_from,
         )
 
     if test_reasons or meta.get("has_test_resource"):
         detail = "; ".join(test_reasons[:3]) or "тестовое в ресурсах"
-        if closed:
-            detail = f"статус {state_id}; {detail}"
         if last_from == "работодатель":
             return "Тестовое задание", f"похоже, ждут решение · {detail}", last_from
+        if last_from == "я":
+            # Тест уже отправили — ждём ответ; категория «Тестовые» при этом остаётся.
+            return "Ждать ответа HR", f"после теста · {detail}", last_from
         return "Тестовое задание", f"тест в переписке · {detail}", last_from
-
-    if closed:
-        return "Отказ / закрыто", f"статус {state_id}; последний: {author}", last_from
 
     if last_from == "работодатель":
         snippet = _clip_snippet(last_text)
@@ -482,12 +494,19 @@ def classify(meta: dict[str, Any], messages: list[dict[str, Any]]) -> ChatRecord
     if not categories:
         categories.append("Обсуждения")
 
-    action, action_detail, last_from = detect_action(
-        meta, messages, invite_reasons, test_reasons
-    )
-    blob = f"{corpus}\n{action_detail}\n{build_summary(messages)}"
+    # Закрытость по тексту HR считаем до action, чтобы отказ перебивал старые приглашения.
     strong_contact = bool(match_reasons(corpus, STRONG_CONTACT_RE))
-    vacancy_closed = bool(match_reasons(blob, CLOSED_RE))
+    vacancy_closed = bool(match_reasons(corpus, CLOSED_RE))
+
+    action, action_detail, last_from = detect_action(
+        meta,
+        messages,
+        invite_reasons,
+        test_reasons,
+        vacancy_closed=vacancy_closed,
+    )
+    if action == "Отказ / закрыто":
+        vacancy_closed = True
 
     return ChatRecord(
         negotiation_id=str(meta.get("id") or ""),

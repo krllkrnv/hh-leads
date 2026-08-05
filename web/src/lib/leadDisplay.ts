@@ -3,7 +3,7 @@ import type { Lead } from '@/types/report'
 const WHY_PREFIX = /^(?:последнее от HR|бот|последнее от тебя|автоответ)\s*[:·]\s*/i
 
 /**
- * Читаемый фрагмент «сути» без служебных префиксов.
+ * Убирает служебные префиксы из текста «суть», чтобы в списке было читаемо.
  */
 export function displayWhy(why: string): string {
   const cleaned = why.replace(/\s+/g, ' ').trim().replace(WHY_PREFIX, '')
@@ -11,7 +11,7 @@ export function displayWhy(why: string): string {
 }
 
 /**
- * Короткая дата для списка: сегодня/вчера или дд.мм HH:mm.
+ * Короткая дата для строки лида: «сегодня», «вчера» или день.месяц и время.
  */
 export function displayUpdated(raw: string): string {
   const value = raw.trim()
@@ -46,7 +46,7 @@ export function displayUpdated(raw: string): string {
 }
 
 /**
- * Разбивает строку ключевых слов: запятая / точка с запятой / перевод строки.
+ * Делит строку ключевых слов по запятым, точкам с запятой и переводам строки.
  */
 export function parseKeywords(raw: string): string[] {
   return raw
@@ -60,7 +60,8 @@ function leadHaystack(lead: Lead): string {
 }
 
 /**
- * Лид проходит фильтр профиля: все include есть, ни одного exclude нет.
+ * Проверяет, проходит ли лид фильтр профиля: все слова из «есть» встречаются,
+ * ни одного слова из «исключить» нет.
  */
 export function matchesProfile(lead: Lead, includeRaw: string, excludeRaw: string): boolean {
   const hay = leadHaystack(lead)

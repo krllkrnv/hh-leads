@@ -6,8 +6,17 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from classify import ChatRecord, classify, extract_messages, extract_meta
-from hh_client import ChatikClient, suggest_hh_host_from_cookie
+from hh_client import ChatikClient, SyncCancelled, suggest_hh_host_from_cookie
 from progress import ProgressCb, emit
+
+
+class PartialSync(Exception):
+    """Синхронизацию остановили: в records уже лежат разобранные чаты, их можно сохранить."""
+
+    def __init__(self, records: list[ChatRecord], since: datetime, message: str = "") -> None:
+        super().__init__(message or "Синхронизация отменена")
+        self.records = records
+        self.since = since
 
 
 def _company_label(entry: dict[str, Any]) -> str:
@@ -42,41 +51,54 @@ def fetch_records(
     def cancelled() -> bool:
         return bool(callable(should_cancel) and should_cancel())
 
-    emit(on_progress, "start", f"Старт синхронизации за последние {days} дн.")
-    emit(on_progress, "auth", "Проверяю cookie и подключаюсь к Chatik…")
+    emit(
+        on_progress,
+        "start",
+        f"Начинаю синхронизацию: возьму чаты, где что-то происходило за последние {days} дн.",
+    )
+    emit(on_progress, "auth", "Проверяю cookie и подключаюсь к чатам hh…")
 
     resolved_host = (hh_host or "").strip() or suggest_hh_host_from_cookie(cookie)
 
     with ChatikClient(cookie, delay=delay, hh_host=resolved_host) as client:
         if cancelled():
-            raise RuntimeError("Синхронизация отменена")
+            raise SyncCancelled("Синхронизация отменена")
 
         applicant_id = client.get_applicant_id()
         if applicant_id:
-            emit(on_progress, "auth", "Сессия принята, профиль найден")
+            emit(on_progress, "auth", "Cookie принят, профиль соискателя найден")
         else:
             emit(
                 on_progress,
                 "warn",
-                "Профиль не определён — разметка «я / HR» может быть грубее",
+                "Не удалось определить ваш профиль — сообщения «я» и «HR» могут путаться",
             )
 
-        emit(on_progress, "list", "Собираю список чатов за период…")
+        emit(on_progress, "list", "Собираю список чатов по последней активности…")
 
         def on_page(page: int, collected: int) -> None:
             emit(
                 on_progress,
                 "list",
-                f"Страница {page + 1}: уже {collected} чатов в выборке",
+                f"Страница {page + 1}: в выборке уже {collected} чатов",
                 current=collected,
             )
 
-        chat_entries = client.iter_chats(since, on_page=on_page)
+        try:
+            chat_entries = client.iter_chats(
+                since,
+                on_page=on_page,
+                should_cancel=cancelled if should_cancel else None,
+            )
+        except SyncCancelled:
+            emit(on_progress, "warn", "Остановили, пока ещё собирался список чатов")
+            raise PartialSync([], since) from None
+
         total = len(chat_entries)
         emit(
             on_progress,
             "list",
-            f"В окне {days} дн. найдено чатов: {total}",
+            f"За {days} дн. по активности нашлось чатов: {total}",
             current=total,
             total=total,
         )
@@ -87,11 +109,11 @@ def fetch_records(
                 emit(
                     on_progress,
                     "warn",
-                    f"Остановлено пользователем после {len(records)} чатов",
+                    f"Остановили после {len(records)} из {total} чатов — сохраняю то, что уже разобрал",
                     current=idx,
                     total=total,
                 )
-                raise RuntimeError("Синхронизация отменена")
+                raise PartialSync(records, since)
 
             chat = entry["chat"]
             chat_id = str(chat.get("id") or "")
@@ -109,11 +131,11 @@ def fetch_records(
             try:
                 if chat_id:
                     chat_data = client.get_chat_data(chat_id)
-            except Exception as exc:  # noqa: BLE001
+            except Exception:  # noqa: BLE001
                 emit(
                     on_progress,
                     "warn",
-                    f"Не удалось загрузить сообщения ({company}): {exc}",
+                    f"Не удалось прочитать переписку у «{company}» — беру только последнее сообщение из списка",
                     current=idx,
                     total=total,
                     company=company,
@@ -141,7 +163,7 @@ def fetch_records(
             emit(
                 on_progress,
                 "classify",
-                f"Классифицирую: {company}",
+                f"Разбираю, что делать с чатом: {company}",
                 current=idx,
                 total=total,
                 company=company,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Тег типа лида: soft fill.
+ * Цветная плашка типа лида: у каждого тега свой оттенок.
  */
 import { computed, useCssModule } from 'vue'
 import type { LeadTag } from '@/types/report'
@@ -32,40 +32,62 @@ const classList = computed(() => [$style.UiPill, $style[`_${props.tag}`]])
   background: var(--color-raised);
   color: var(--color-muted);
   @include text(caption);
+  font-weight: 600;
   user-select: none;
   white-space: nowrap;
 
-  &._reply,
+  /* Нужен ответ — красный, срочно */
+  &._reply {
+    color: var(--color-tag-reply);
+    background: var(--color-tag-reply-soft);
+  }
+
+  /* Связаться — янтарный, контакт */
   &._call {
-    color: var(--color-warning);
-    background: var(--color-warning-soft);
+    color: var(--color-tag-call);
+    background: var(--color-tag-call-soft);
   }
 
+  /* Собеседование — зелёный */
   &._interview {
-    color: var(--color-success);
-    background: var(--color-success-soft);
+    color: var(--color-tag-interview);
+    background: var(--color-tag-interview-soft);
   }
 
+  /* Тестовое — голубой */
   &._test {
-    color: var(--color-accent);
-    background: var(--color-accent-soft);
+    color: var(--color-tag-test);
+    background: var(--color-tag-test-soft);
   }
 
+  /* Приглашение — фиолетовый */
   &._invite {
-    color: var(--color-muted);
-    background: var(--color-raised);
+    color: var(--color-tag-invite);
+    background: var(--color-tag-invite-soft);
   }
 
-  &._wait,
-  &._bot,
+  /* Ожидание — серо-голубой */
+  &._wait {
+    color: var(--color-tag-wait);
+    background: var(--color-tag-wait-soft);
+  }
+
+  /* Автоответ — нейтральный серый */
+  &._bot {
+    color: var(--color-tag-bot);
+    background: var(--color-tag-bot-soft);
+  }
+
+  /* Обсуждение — приглушённый */
   &._discuss {
-    color: var(--color-faint);
-    background: var(--color-raised);
+    color: var(--color-tag-discuss);
+    background: var(--color-tag-discuss-soft);
   }
 
+  /* Закрыто — спокойный серый, не кричит как ошибка */
   &._closed {
-    color: var(--color-danger);
-    background: var(--color-danger-soft);
+    color: var(--color-tag-closed);
+    background: var(--color-tag-closed-soft);
   }
 }
 </style>

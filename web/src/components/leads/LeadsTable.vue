@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Очередь лидов. Клик по строке открывает чат.
+ * Очередь лидов. Клик по строке открывает чат на hh в новой вкладке.
  */
 import { useCssModule } from 'vue'
 import type { Lead } from '@/types/report'
@@ -19,14 +19,14 @@ const emit = defineEmits<{
 const $style = useCssModule()
 
 /**
- * Классы строки с учётом «разобрано».
+ * Собирает CSS-классы строки: «разобрано» и кликабельность.
  */
 function rowClass(done: boolean, hasChat: boolean): Array<string | false> {
   return [$style.row, done && $style._done, hasChat && $style._clickable]
 }
 
 /**
- * Переключает локальную отметку «разобрано».
+ * Ставит или снимает локальную отметку «уже разобрал этот лид».
  */
 function onToggleDone(id: string, event: Event): void {
   const target = event.target as HTMLInputElement
@@ -34,7 +34,7 @@ function onToggleDone(id: string, event: Event): void {
 }
 
 /**
- * Открывает чат.
+ * Открывает чат работодателя на hh.ru.
  */
 function openChat(lead: Lead): void {
   if (!lead.chatUrl) {
@@ -44,7 +44,7 @@ function openChat(lead: Lead): void {
 }
 
 /**
- * Клик по строке → чат.
+ * Клик по строке открывает чат, если не кликнули по ссылке, кнопке или чекбоксу.
  */
 function onRowActivate(lead: Lead, event: MouseEvent): void {
   const target = event.target as HTMLElement
@@ -55,7 +55,7 @@ function onRowActivate(lead: Lead, event: MouseEvent): void {
 }
 
 /**
- * Статус только если не «Отклик».
+ * Показывает статус hh только когда он информативнее обычного «Отклик».
  */
 function showStatus(status: string): boolean {
   const value = status.trim()
@@ -69,7 +69,7 @@ function showStatus(status: string): boolean {
 <template>
   <div :class="$style.LeadsTable">
     <p v-if="!leads.length" :class="$style.empty">
-      В этой очереди пусто. Смените вкладку или ослабьте фильтр профиля.
+      В этой очереди пока пусто. Попробуйте другую вкладку или ослабьте фильтр по словам в профиле.
     </p>
 
     <ul v-else :class="$style.list">
@@ -78,7 +78,8 @@ function showStatus(status: string): boolean {
         :key="lead.id"
         :class="rowClass(isDone(lead.id), Boolean(lead.chatUrl))"
         :tabindex="lead.chatUrl ? 0 : undefined"
-        :role="lead.chatUrl ? 'link' : undefined"
+        :role="lead.chatUrl ? 'button' : undefined"
+        :aria-label="lead.chatUrl ? `Открыть чат: ${lead.company}` : undefined"
         @click="onRowActivate(lead, $event)"
         @keydown.enter="openChat(lead)"
         @keydown.space.prevent="openChat(lead)"
@@ -118,13 +119,13 @@ function showStatus(status: string): boolean {
 
         <label
           :class="$style.done"
-          title="Личная отметка: уже ответили или разобрали. Только в браузере."
+          title="Личная пометка только в этом браузере: вы уже ответили или разобрали этот чат."
           @click.stop
         >
           <input
             :class="$style.checkbox"
             type="checkbox"
-            :aria-label="`Отметить разобранным: ${lead.company}`"
+            :aria-label="`Отметить разобранным чат с ${lead.company}`"
             :checked="isDone(lead.id)"
             @change="onToggleDone(lead.id, $event)"
           />

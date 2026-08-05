@@ -11,6 +11,7 @@ cd hh_chats
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+pip install -r requirements-dev.txt   # pytest, ruff (опционально)
 cp .env.example .env   # только для CLI-удобства
 ```
 
@@ -38,6 +39,8 @@ npm install
 1. **Sync** — cookie + число дней → Chatik API → отчёт в памяти сессии.
 2. **Upload** — свой `.xlsx` (выгрузка CLI) или `.json` (ранее сохранённый отчёт дашборда).
 
+Окно «N дней» фильтрует чаты по **последней активности** (`lastActivityTime`), а не по дате отклика.
+
 ### Dev (два процесса)
 
 Терминал 1 — API:
@@ -45,7 +48,7 @@ npm install
 ```bash
 cd hh_chats
 ./scripts/dev.sh api
-# или: source .venv/bin/activate && uvicorn api:app --reload --port 8000
+# или: source .venv/bin/activate && uvicorn api:app --reload --host 127.0.0.1 --port 8000
 ```
 
 Терминал 2 — Vite (проксирует `/api` на `:8000`):
@@ -64,7 +67,7 @@ cd hh_chats
 cd hh_chats/web && npm run build
 cd ..
 source .venv/bin/activate
-uvicorn api:app --port 8000
+uvicorn api:app --host 127.0.0.1 --port 8000
 ```
 
 Открой http://127.0.0.1:8000
@@ -79,6 +82,7 @@ uvicorn api:app --port 8000
 | `POST` | `/api/upload` | multipart `.xlsx` / `.json` (лимит 15 МБ) |
 | `POST` | `/api/upload/stream` | upload + NDJSON прогресс |
 | `GET` | `/api/report` | текущий отчёт (заголовок `X-Session-Id`) |
+| `GET` | `/api/report/excel` | скачать текущий отчёт как `.xlsx` |
 | `DELETE` | `/api/session` | очистить сессию |
 | `GET` | `/api/health` | healthcheck |
 
@@ -93,6 +97,15 @@ python analyze_chats.py --cookie "hhtoken=...; _xsrf=..."
 ```
 
 Результат: Excel с листами **Сводка**, **Действия**, **Приглашения**, **Тестовые**, **Обсуждения**, **Все действия**. Этот же файл можно загрузить в дашборд без cookie.
+
+## Тесты
+
+```bash
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+pytest
+ruff check .
+```
 
 ## Классификация
 
@@ -123,3 +136,5 @@ python analyze_chats.py --cookie "hhtoken=...; _xsrf=..."
 - Chatik API не официальный контракт, может меняться.
 - Только чтение; сообщения не отправляются.
 - Single-user, in-memory сессии — перезапуск API сбрасывает данные (загрузите файл снова или сделайте sync).
+- Окно дней считается по последней активности в чате, не по дате отклика.
+- Если остановить sync раньше времени, в отчёт попадут уже разобранные чаты.

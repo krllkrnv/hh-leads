@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Очереди, поиск и пресеты профиля (стек / грейд / роль).
+ * Очереди лидов, быстрый поиск и пресеты профиля (стек, грейд, роль).
  */
 import { ref } from 'vue'
 import type { FilterKey } from '@/types/report'
@@ -40,16 +40,47 @@ const FILTER_ORDER: FilterKey[] = [
 ]
 
 const openGroupId = ref<string | null>(null)
+const panelId = 'lead-filters-panel'
 
 /**
- * Переключает активную очередь.
+ * Переключает, какую очередь лидов сейчас смотрим.
  */
 function handleFilter(key: FilterKey): void {
   emit('update:filter', key)
 }
 
 /**
- * Переключает скрытие закрытых лидов.
+ * Перемещает фокус между вкладками очередей стрелками, Home и End.
+ */
+function onTabKeydown(event: KeyboardEvent, index: number): void {
+  let next: number
+  switch (event.key) {
+    case 'ArrowRight':
+    case 'ArrowDown':
+      next = (index + 1) % FILTER_ORDER.length
+      break
+    case 'ArrowLeft':
+    case 'ArrowUp':
+      next = (index - 1 + FILTER_ORDER.length) % FILTER_ORDER.length
+      break
+    case 'Home':
+      next = 0
+      break
+    case 'End':
+      next = FILTER_ORDER.length - 1
+      break
+    default:
+      return
+  }
+  event.preventDefault()
+  handleFilter(FILTER_ORDER[next])
+  const tabs = (event.currentTarget as HTMLElement).parentElement?.querySelectorAll('[role="tab"]')
+  const el = tabs?.[next] as HTMLElement | undefined
+  el?.focus()
+}
+
+/**
+ * Включает или выключает скрытие закрытых вакансий в списке.
  */
 function onHideClosed(event: Event): void {
   const target = event.target as HTMLInputElement
@@ -57,21 +88,28 @@ function onHideClosed(event: Event): void {
 }
 
 /**
- * Открывает группу пресетов (hover / focus).
+ * По клику открывает или закрывает выпадающий список пресетов группы.
+ */
+function toggleGroup(id: string): void {
+  openGroupId.value = openGroupId.value === id ? null : id
+}
+
+/**
+ * Открывает выпадающий список пресетов при наведении или фокусе.
  */
 function openGroup(id: string): void {
   openGroupId.value = id
 }
 
 /**
- * Закрывает группу пресетов.
+ * Закрывает выпадающий список пресетов.
  */
 function closeGroup(): void {
   openGroupId.value = null
 }
 
 /**
- * Применяет пресет профиля.
+ * Подставляет слова пресета в поля «Содержит» и «Исключить».
  */
 function applyPreset(preset: ProfilePreset): void {
   emit('update:includeKeywords', preset.include)
@@ -80,55 +118,65 @@ function applyPreset(preset: ProfilePreset): void {
 }
 
 /**
- * Сбрасывает профиль.
+ * Очищает поля фильтра профиля.
  */
 function clearProfile(): void {
   emit('update:includeKeywords', '')
   emit('update:excludeKeywords', '')
 }
+
+function onPresetKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape') {
+    closeGroup()
+  }
+}
 </script>
 
 <template>
   <div :class="$style.LeadFilters">
-    <div :class="$style.tabsShell" role="tablist" aria-label="Очереди">
+    <div :class="$style.tabsShell" role="tablist" aria-label="Очереди лидов">
       <button
-        v-for="key in FILTER_ORDER"
+        v-for="(key, index) in FILTER_ORDER"
+        :id="`lead-tab-${key}`"
         :key="key"
         type="button"
         role="tab"
         :aria-selected="filter === key"
+        :aria-controls="panelId"
+        :tabindex="filter === key ? 0 : -1"
         :class="[$style.tab, filter === key && $style._active]"
         @click="handleFilter(key)"
+        @keydown="onTabKeydown($event, index)"
       >
         <span :class="$style.tabLabel">{{ FILTER_LABELS[key] }}</span>
         <span :class="$style.tabCount">{{ counts[key] }}</span>
       </button>
     </div>
 
-    <div :class="$style.profile">
+    <div :id="panelId" role="tabpanel" :aria-labelledby="`lead-tab-${filter}`" :class="$style.profile">
       <div :class="$style.profileFields">
         <label :class="$style.field">
-          <span :class="$style.fieldLabel">Содержит</span>
+          <span :class="$style.fieldLabel">В названии вакансии или компании есть</span>
           <UiTextInput
             :model-value="includeKeywords"
-            placeholder="например: python, django — все слова должны встретиться"
+            placeholder="Например: python, django — все слова должны встретиться"
             @update:model-value="emit('update:includeKeywords', $event)"
           />
         </label>
         <label :class="$style.field">
-          <span :class="$style.fieldLabel">Исключить</span>
+          <span :class="$style.fieldLabel">Исключить вакансии со словами</span>
           <UiTextInput
             :model-value="excludeKeywords"
-            placeholder="например: битрикс, php"
+            placeholder="Например: битрикс, php"
             @update:model-value="emit('update:excludeKeywords', $event)"
           />
         </label>
       </div>
 
-      <div :class="$style.presetsBlock">
+      <div :class="$style.presetsBlock" @keydown="onPresetKeydown">
         <div :class="$style.presetsHead">
-          <span :class="$style.fieldLabel">Пресеты</span>
-          <button type="button" :class="$style.clearBtn" @click="clearProfile">Сбросить</button>
+          <span :class="$style.fieldLabel">Готовые наборы слов</span>
+          <button type="button" :class="$style.clearBtn" @click="clearProfile">Очистить фильтр</button>
         </div>
 
         <div :class="$style.groups" @mouseleave="closeGroup">
@@ -143,6 +191,8 @@ function clearProfile(): void {
               type="button"
               :class="$style.groupBtn"
               :aria-expanded="openGroupId === group.id"
+              :aria-haspopup="true"
+              @click="toggleGroup(group.id)"
             >
               {{ group.label }}
               <span :class="$style.groupCount">{{ group.presets.length }}</span>
@@ -174,7 +224,7 @@ function clearProfile(): void {
     <div :class="$style.controls">
       <UiTextInput
         :model-value="query"
-        placeholder="Быстрый поиск по компании или вакансии…"
+        placeholder="Поиск по компании или названию вакансии"
         @update:model-value="emit('update:query', $event)"
       />
       <label :class="$style.check">
@@ -184,11 +234,11 @@ function clearProfile(): void {
           :checked="hideClosed"
           @change="onHideClosed"
         />
-        <span :class="$style.checkLabel">Скрыть закрытые</span>
+        <span :class="$style.checkLabel">Скрыть закрытые вакансии</span>
       </label>
       <span :class="$style.visible">
         {{ visibleCount }}
-        <span :class="$style.visibleMuted">в очереди</span>
+        <span :class="$style.visibleMuted">сейчас в списке</span>
       </span>
     </div>
   </div>

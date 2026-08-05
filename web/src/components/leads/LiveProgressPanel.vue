@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Панель прогресса sync/upload — в потоке, с expand-анимацией.
+ * Панель прогресса синхронизации или разбора файла — в потоке страницы, с анимацией появления.
  */
 import { computed, nextTick, ref, watch } from 'vue'
 import type { ProgressStage } from '@/types/progress'
@@ -33,9 +33,9 @@ const logRef = ref<HTMLElement | null>(null)
 
 const title = computed(() => {
   if (props.mode === 'upload') {
-    return 'Загрузка файла'
+    return 'Разбираю файл отчёта'
   }
-  return 'Синхронизация чатов'
+  return 'Загружаю чаты с hh'
 })
 
 const visibleStages = computed(() => {
@@ -50,7 +50,7 @@ const visibleStages = computed(() => {
 const stageOrder = computed(() => visibleStages.value.map((item) => item.id))
 
 /**
- * Статус этапа: pending / active / done.
+ * На каком шаге сейчас этап: ещё не начат, активен или уже пройден.
  */
 function stageStatus(id: ProgressStage): 'pending' | 'active' | 'done' {
   const order = stageOrder.value
@@ -124,7 +124,7 @@ watch(
             </div>
             <div :class="$style.copy">
               <h2 :class="$style.title">{{ title }}</h2>
-              <p :class="$style.message">{{ message || 'Работаю…' }}</p>
+              <p :class="$style.message">{{ message || 'Ещё готовлюсь…' }}</p>
             </div>
             <div :class="$style.headerAside">
               <div v-if="total > 0" :class="$style.counter">
@@ -138,7 +138,7 @@ watch(
                 :class="$style.cancelBtn"
                 @click="emit('cancel')"
               >
-                Стоп
+                Остановить
               </button>
             </div>
           </header>
@@ -176,7 +176,7 @@ watch(
                 {{ line.message }}
               </span>
             </div>
-            <p v-if="!logs.length" :class="$style.logEmpty">Жду первые события…</p>
+            <p v-if="!logs.length" :class="$style.logEmpty">Жду первые сообщения о ходе загрузки…</p>
           </div>
         </section>
       </div>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Экран входа: cookie-sync или загрузка файла.
+ * Экран входа: загрузка чатов по cookie или открытие уже готового отчёта из файла.
  */
 import { ref } from 'vue'
 import BrandTitle from '@/components/ui/BrandTitle.vue'
@@ -26,7 +26,10 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const fileName = ref('')
 
 /**
- * Отправляет cookie и параметры периода на sync.
+ * Отправляет cookie и период на сервер для синхронизации с hh.
+ * Текст cookie в поле оставляем: если синхронизация упадёт с ошибкой,
+ * можно нажать кнопку ещё раз без повторной вставки. Когда отчёт
+ * успешно загрузится, этот экран просто скроется вместе с полем.
  */
 function handleSync(): void {
   const clamped = Math.min(180, Math.max(1, Number(days.value) || DEFAULT_SYNC_DAYS))
@@ -36,11 +39,10 @@ function handleSync(): void {
     days: clamped,
     hhHost: hhHost.value.trim(),
   })
-  cookie.value = ''
 }
 
 /**
- * Читает выбранный файл и эмитит upload.
+ * Берёт выбранный файл отчёта и отдаёт его родителю на разбор.
  */
 function handleFileChange(event: Event): void {
   const input = event.target as HTMLInputElement
@@ -54,7 +56,7 @@ function handleFileChange(event: Event): void {
 }
 
 /**
- * Открывает системный file picker.
+ * Открывает системное окно выбора файла.
  */
 function handlePickFile(): void {
   fileInput.value?.click()
@@ -66,9 +68,9 @@ function handlePickFile(): void {
     <header :class="$style.masthead">
       <BrandTitle />
       <p :class="$style.lead">
-        Анализ переписок с работодателями на hh.ru. Здесь собраны приглашения на собеседование,
-        тестовые задания и активные обсуждения. Чаты забираются по cookie из браузера. Если отчёт
-        уже есть в Excel, файл можно открыть без cookie.
+        Разбирает переписки с работодателями на hh.ru: приглашения, тестовые и то, где ещё
+        ожидается ваш ответ. Чаты подтягиваются по cookie из браузера. Если отчёт уже скачан из
+        дашборда раньше, cookie не нужен — откройте файл справа.
       </p>
       <div :class="$style.accentLine" aria-hidden="true" />
     </header>
@@ -76,7 +78,7 @@ function handlePickFile(): void {
     <div :class="$style.workspace">
       <form :class="$style.syncForm" @submit.prevent="handleSync">
         <div :class="$style.sectionHead">
-          <h2 :class="$style.sectionTitle">Загрузить чаты</h2>
+          <h2 :class="$style.sectionTitle">Загрузить чаты с hh</h2>
           <ol :class="$style.steps">
             <li>
               Открой
@@ -112,12 +114,12 @@ function handlePickFile(): void {
         </div>
 
         <label :class="$style.field">
-          <span :class="$style.fieldLabel">Cookie</span>
+          <span :class="$style.fieldLabel">Cookie из браузера</span>
           <textarea
             v-model="cookie"
             :class="$style.textarea"
             rows="5"
-            placeholder="hhtoken=…; _xsrf=…; … — или вставь таблицу cookie как есть"
+            placeholder="Вставь строку Cookie или таблицу целиком, например: hhtoken=…; _xsrf=…"
             required
             autocomplete="off"
             spellcheck="false"
@@ -126,14 +128,18 @@ function handlePickFile(): void {
 
         <div :class="$style.row">
           <label :class="$style.field">
-            <span :class="$style.fieldLabel">Дней</span>
+            <span :class="$style.fieldLabel">За сколько дней</span>
             <UiTextInput v-model="days" type="number" min="1" max="180" />
           </label>
           <label :class="$style.field">
-            <span :class="$style.fieldLabel">Host</span>
+            <span :class="$style.fieldLabel">Сайт hh</span>
             <UiTextInput v-model="hhHost" placeholder="https://hh.ru" />
           </label>
         </div>
+        <p :class="$style.hint">
+          Берутся чаты, в которых что-то происходило за выбранный срок (последнее сообщение или
+          активность). Дата отклика на вакансию тут не учитывается. Можно указать от 1 до 180 дней.
+        </p>
 
         <div :class="$style.actions">
           <UiButton
@@ -150,17 +156,20 @@ function handlePickFile(): void {
             :disabled="props.loading"
             @click="emit('cancelSetup')"
           >
-            К отчёту
+            Вернуться к отчёту
           </UiButton>
         </div>
       </form>
 
       <aside :class="$style.uploadPane">
         <p :class="$style.kicker">Без cookie</p>
-        <h2 :class="$style.sectionTitle">Файл отчёта</h2>
-        <p :class="$style.hint">Excel из CLI или JSON, сохранённый из дашборда.</p>
+        <h2 :class="$style.sectionTitle">Открыть готовый отчёт</h2>
+        <p :class="$style.hint">
+          Файл, который вы скачали из этого дашборда: JSON или Excel. Cookie для этого не нужен.
+        </p>
 
         <input
+          id="hh-leads-upload"
           ref="fileInput"
           type="file"
           accept=".xlsx,.json,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -168,7 +177,16 @@ function handlePickFile(): void {
           @change="handleFileChange"
         />
 
-        <div :class="$style.uploadDrop" @click="handlePickFile">
+        <div
+          :class="$style.uploadDrop"
+          role="button"
+          tabindex="0"
+          aria-controls="hh-leads-upload"
+          aria-label="Выбрать скачанный отчёт JSON или Excel"
+          @click="handlePickFile"
+          @keydown.enter.prevent="handlePickFile"
+          @keydown.space.prevent="handlePickFile"
+        >
           <UiButton
             :variant="EButtonVariant.Ghost"
             :disabled="props.loading"
@@ -176,9 +194,9 @@ function handlePickFile(): void {
           >
             Выбрать файл
           </UiButton>
-          <p :class="$style.uploadHint">.xlsx или .json</p>
+          <p :class="$style.uploadHint">JSON или Excel (.xlsx)</p>
         </div>
-        <p v-if="fileName" :class="$style.fileName">{{ fileName }}</p>
+        <p v-if="fileName" :class="$style.fileName">Выбран файл: {{ fileName }}</p>
       </aside>
     </div>
   </section>
@@ -330,7 +348,7 @@ function handlePickFile(): void {
   gap: var(--space-3);
 
   @include respond-to(from-tablet) {
-    grid-template-columns: 6.5rem 1fr;
+    grid-template-columns: 10.5rem 1fr;
   }
 }
 

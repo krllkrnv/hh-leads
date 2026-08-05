@@ -20,7 +20,7 @@ __pycache__/
 node_modules/
 web/dist/
 
-# Session / uploads
+# Session / uploads (legacy paths; tool stores reports in-memory)
 uploads/
 *.session.json
 session_dumps/

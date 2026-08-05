@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -79,12 +79,23 @@ def chat_id_from_url(url: str) -> str:
 
 
 def lead_tag(rec: ChatRecord) -> str:
+    """Выбирает одну плашку для UI.
+
+    Сначала отказ, потом текущее ожидание или автоответ, затем «позвоните»,
+    «нужен ответ», собес, тест и приглашение из истории.
+    """
     if rec.vacancy_closed or rec.action == "Отказ / закрыто":
         return "closed"
-    if rec.action == "Ответить работодателю":
-        return "reply"
+    # Уже ответили — важнее старых категорий «приглашение» или «тестовое».
+    if rec.action == "Ждать ответа HR":
+        return "wait"
+    if rec.action == "Автоответ / бот":
+        return "bot"
+    # Явная просьба позвонить или написать важнее простого «ответьте на сообщение».
     if rec.strong_contact:
         return "call"
+    if rec.action == "Ответить работодателю":
+        return "reply"
     if (
         rec.state_id.lower() == "interview"
         or rec.state_name == "Собеседование"
@@ -95,10 +106,6 @@ def lead_tag(rec: ChatRecord) -> str:
         return "test"
     if "Приглашения" in rec.categories:
         return "invite"
-    if rec.action == "Ждать ответа HR":
-        return "wait"
-    if rec.action == "Автоответ / бот":
-        return "bot"
     return "discuss"
 
 
@@ -140,6 +147,7 @@ def build_report(
     days: int,
     since: datetime | None = None,
     source: str = "sync",
+    incomplete: bool = False,
 ) -> dict[str, Any]:
     counts = {
         "invites": sum(1 for r in records if "Приглашения" in r.categories),
@@ -166,8 +174,8 @@ def build_report(
     closed = [l for l in leads if l["tag"] == "closed" or l["closed"]]
 
     order = {
-        "reply": 0,
-        "call": 1,
+        "call": 0,
+        "reply": 1,
         "interview": 2,
         "test": 3,
         "invite": 4,
@@ -181,11 +189,13 @@ def build_report(
         key=lambda x: (order.get(str(x.get("tag")), 9), x.get("updated") or ""),
     )
 
-    period = f"Последние {days} дней"
+    period = f"Активность в чатах за последние {days} дн."
     period_from = None
     if since is not None:
         period_from = since.date().isoformat()
-        period = f"С {period_from}"
+        period = f"Активность в чатах с {period_from}"
+    if incomplete:
+        period = f"{period} (загрузку остановили раньше времени)"
 
     exported_at = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
 
@@ -196,6 +206,7 @@ def build_report(
             "days": days,
             "exportedAt": exported_at,
             "source": source,
+            "incomplete": incomplete,
             "total": len(records),
             "invites": counts["invites"],
             "tests": counts["tests"],
@@ -228,7 +239,6 @@ def build_report(
             "bot": bot,
             "closed": closed,
         },
-        "records": leads,
     }
 
 
@@ -396,6 +406,70 @@ def write_excel(
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(out_path)
+
+
+def records_from_report(report: dict[str, Any]) -> tuple[list[ChatRecord], int, datetime]:
+    """Собирает ChatRecord из JSON-отчёта дашборда для выгрузки в Excel."""
+    meta = report.get("meta") if isinstance(report.get("meta"), dict) else {}
+    try:
+        days = max(1, min(180, int(meta.get("days") or 60)))
+    except (TypeError, ValueError):
+        days = 60
+
+    period_from = meta.get("periodFrom")
+    since: datetime | None = None
+    if period_from:
+        try:
+            since = datetime.fromisoformat(str(period_from))
+            if since.tzinfo is None:
+                since = since.replace(tzinfo=timezone.utc)
+        except ValueError:
+            since = None
+    if since is None:
+        since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    leads = report.get("leads") if isinstance(report.get("leads"), dict) else {}
+    items = leads.get("all") if isinstance(leads.get("all"), list) else []
+    records: list[ChatRecord] = []
+    for lead in items:
+        if not isinstance(lead, dict):
+            continue
+        chat_url = str(lead.get("chatUrl") or "")
+        cid = str(lead.get("id") or "") or chat_id_from_url(chat_url)
+        status_name = str(lead.get("status") or "")
+        state_id = str(lead.get("stateId") or STATE_ID_BY_NAME.get(status_name, "") or "")
+        categories = lead.get("categories")
+        if not isinstance(categories, list) or not categories:
+            categories = ["Обсуждения"]
+        invite_reasons = lead.get("inviteReasons")
+        if not isinstance(invite_reasons, list):
+            invite_reasons = []
+        test_reasons = lead.get("testReasons")
+        if not isinstance(test_reasons, list):
+            test_reasons = []
+        records.append(
+            ChatRecord(
+                negotiation_id=cid,
+                company=str(lead.get("company") or ""),
+                vacancy_name=str(lead.get("vacancy") or ""),
+                vacancy_url=str(lead.get("vacancyUrl") or ""),
+                chat_url=chat_url,
+                state_id=state_id,
+                state_name=status_name,
+                updated_at=parse_excel_dt(lead.get("updated")),
+                first_message_at=None,
+                summary=str(lead.get("summary") or lead.get("why") or ""),
+                invite_reasons=[str(x) for x in invite_reasons],
+                test_reasons=[str(x) for x in test_reasons],
+                categories=[str(c) for c in categories],
+                action=str(lead.get("action") or "Без действия"),
+                action_detail=str(lead.get("why") or ""),
+                last_from=str(lead.get("lastFrom") or ""),
+                strong_contact=bool(lead.get("strong")),
+                vacancy_closed=bool(lead.get("closed")),
+            )
+        )
+    return records, days, since
 
 
 def _sheet_dicts(ws) -> list[dict[str, Any]]:

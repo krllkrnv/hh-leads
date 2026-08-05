@@ -75,7 +75,12 @@ def main() -> None:
     load_dotenv()
 
     parser = argparse.ArgumentParser(description="Анализ чатов hh.ru → Excel (cookie)")
-    parser.add_argument("--days", type=int, default=60, help="Глубина в днях (по умолчанию 60)")
+    parser.add_argument(
+        "--days",
+        type=int,
+        default=60,
+        help="Глубина по lastActivity, дни 1–180 (по умолчанию 60)",
+    )
     parser.add_argument("--out", type=Path, help="Путь к .xlsx")
     parser.add_argument("--cookie", help="Cookie-строка (иначе HH_COOKIE)")
     parser.add_argument("--host", help="Базовый URL hh (по умолчанию https://hh.ru)")
@@ -87,6 +92,10 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    days = max(1, min(180, int(args.days)))
+    if days != args.days:
+        print(f"Внимание: --days обрезан до {days} (допустимо 1–180)", flush=True)
+
     cookie = (args.cookie or os.getenv("HH_COOKIE") or "").strip()
     if not cookie:
         raise SystemExit(
@@ -97,11 +106,11 @@ def main() -> None:
     out = args.out
     if out is None:
         today = date.today().isoformat()
-        out = root / f"hh_chats_{args.days}d_{today}.xlsx"
+        out = root / f"hh_chats_{days}d_{today}.xlsx"
 
     host = args.host or os.getenv("HH_HOST") or None
     try:
-        analyze(cookie, args.days, out, args.delay, hh_host=host)
+        analyze(cookie, days, out, args.delay, hh_host=host)
     except (HhAuthError, HhApiError) as exc:
         raise SystemExit(str(exc)) from exc
 

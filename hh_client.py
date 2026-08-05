@@ -26,6 +26,10 @@ class HhApiError(Exception):
     """Ошибка ответа Chatik API."""
 
 
+class SyncCancelled(Exception):
+    """Пользователь остановил синхронизацию (list или fetch)."""
+
+
 _COOKIE_META = frozenset(
     {
         "domain",
@@ -382,10 +386,21 @@ class ChatikClient:
         self,
         since: datetime,
         on_page: Callable[[int, int], None] | None = None,
+        should_cancel: Callable[[], bool] | None = None,
     ) -> list[dict[str, Any]]:
+        """Список чатов, у которых последняя активность не старше since.
+
+        После страницы, где встретился более старый чат, следующие страницы
+        не запрашиваем (Chatik обычно отдаёт список от новых к старым).
+        Внутри страницы смотрим все элементы: «молодые» после «старых»
+        не теряем. Чаты без даты активности в окно не попадают.
+        """
         items: list[dict[str, Any]] = []
         page = 0
         while True:
+            if should_cancel is not None and should_cancel():
+                raise SyncCancelled("Синхронизация отменена")
+
             data = self._get(
                 "/chatik/api/chats",
                 params={
@@ -407,9 +422,11 @@ class ChatikClient:
                 activity = parse_dt(chat.get("lastActivityTime")) or parse_dt(
                     (chat.get("lastMessage") or {}).get("creationTime")
                 )
-                if activity is not None and activity < since:
+                if activity is None:
+                    continue
+                if activity < since:
                     stop = True
-                    break
+                    continue
                 chat_id = str(chat.get("id") or "")
                 items.append(
                     {
@@ -457,9 +474,12 @@ class ChatikClient:
         data: dict[str, Any],
         base_params: dict[str, Any],
     ) -> dict[str, Any]:
-        """Дочитывает страницы messages, если Chatik отдал pages > 1."""
-        messages = data.get("messages")
-        if not isinstance(messages, dict):
+        """Дочитывает следующие страницы сообщений, если их больше одной.
+
+        Блок messages может лежать на верхнем уровне ответа или внутри chat.
+        """
+        messages, owner, key = resolve_messages_block(data)
+        if messages is None or owner is None or key is None:
             return data
         items = list(messages.get("items") or [])
         pages = messages.get("pages")
@@ -470,18 +490,44 @@ class ChatikClient:
         if page_count <= 1:
             return data
 
-        for page in range(1, min(page_count, 20)):
+        # Длинные треды: дочитываем до 40 страниц, дальше почти не бывает.
+        for page in range(1, min(page_count, 40)):
             page_params = dict(base_params)
             page_params["chatId"] = chat_id
             page_params["page"] = page
             more = self._get("/chatik/api/chat_data", params=page_params, optional=True)
             if not more:
                 break
-            block = more.get("messages") or {}
+            block, _, _ = resolve_messages_block(more)
             chunk = block.get("items") if isinstance(block, dict) else None
             if not chunk:
                 break
             items.extend(chunk)
         messages["items"] = items
+        owner[key] = messages
+        # Дублируем в оба места: extract_messages умеет читать и top-level, и chat.messages.
         data["messages"] = messages
+        chat = data.get("chat")
+        if isinstance(chat, dict):
+            chat["messages"] = messages
         return data
+
+
+def resolve_messages_block(
+    chat_data: dict[str, Any],
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, str | None]:
+    """Ищет блок messages в ответе chat_data: сверху или внутри chat.
+
+    Возвращает сам блок, словарь-владельца и ключ, либо тройку None.
+    """
+    top = chat_data.get("messages")
+    if isinstance(top, dict) and (top.get("items") is not None or top.get("pages") is not None):
+        return top, chat_data, "messages"
+    chat = chat_data.get("chat")
+    if isinstance(chat, dict):
+        nested = chat.get("messages")
+        if isinstance(nested, dict):
+            return nested, chat, "messages"
+    if isinstance(top, dict):
+        return top, chat_data, "messages"
+    return None, None, None

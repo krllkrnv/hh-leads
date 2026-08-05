@@ -18,10 +18,10 @@ export const PROGRESS_STAGES: Array<{
   id: ProgressStage
   label: string
 }> = [
-  { id: 'auth', label: 'Сессия' },
+  { id: 'auth', label: 'Проверка cookie' },
   { id: 'list', label: 'Список чатов' },
   { id: 'fetch', label: 'Переписки' },
-  { id: 'classify', label: 'Классификация' },
-  { id: 'parse', label: 'Разбор файла' },
-  { id: 'build', label: 'Отчёт' },
+  { id: 'classify', label: 'Разбор лидов' },
+  { id: 'parse', label: 'Чтение файла' },
+  { id: 'build', label: 'Сборка отчёта' },
 ]
