@@ -1,8 +1,6 @@
-# HH Leads — CLI + локальный дашборд
+# HH Leads — CLI + веб-дашборд
 
-Инструмент для соискателя: забирает переписки hh.ru через Chatik API, классифицирует лиды и показывает их в локальном веб-дашборде (или Excel через CLI).
-
-**Только для себя на localhost.** Cookie = полный доступ к аккаунту hh. Не выкладывайте cookie в репозиторий и не поднимайте сервис в публичный интернет.
+Инструмент для соискателя: забирает переписки hh.ru через Chatik API, классифицирует лиды и показывает их в веб-дашборде (или Excel через CLI).
 
 ## Подготовка
 
@@ -37,7 +35,7 @@ npm install
 Два режима данных:
 
 1. **Sync** — cookie + число дней → Chatik API → отчёт в памяти сессии.
-2. **Upload** — свой `.xlsx` (выгрузка CLI) или `.json` (ранее сохранённый отчёт дашборда).
+2. **Upload** — свой `.xlsx` / `.json` (ранее сохранённый отчёт дашборда).
 
 Окно «N дней» фильтрует чаты по **последней активности** (`lastActivityTime`), а не по дате отклика.
 
@@ -61,13 +59,21 @@ cd hh_chats
 
 Открой http://127.0.0.1:5173
 
-### Prod (статика из FastAPI)
+### Prod локально (без Docker)
 
 ```bash
 cd hh_chats/web && npm run build
 cd ..
 source .venv/bin/activate
 uvicorn api:app --host 127.0.0.1 --port 8000
+```
+
+Открой http://127.0.0.1:8000
+
+### Prod в Docker
+
+```bash
+docker compose up --build
 ```
 
 Открой http://127.0.0.1:8000
@@ -85,8 +91,6 @@ uvicorn api:app --host 127.0.0.1 --port 8000
 | `GET` | `/api/report/excel` | скачать текущий отчёт как `.xlsx` |
 | `DELETE` | `/api/session` | очистить сессию |
 | `GET` | `/api/health` | healthcheck |
-
-Не поднимайте API с `--host 0.0.0.0` без дополнительной защиты: cookie уходит на сервер в plaintext HTTP.
 
 ## CLI (как раньше)
 
@@ -124,11 +128,12 @@ ruff check .
 |--------|------------|
 | `hh_client.py` | HTTP к Chatik |
 | `classify.py` | чистая классификация |
-| `report.py` | модель отчёта + Excel |
+| `report.py` / `report_*.py` / `excel_*.py` | модель отчёта + Excel |
 | `pipeline.py` | sync pipeline |
 | `cli.py` / `analyze_chats.py` | CLI |
 | `api.py` | FastAPI |
 | `web/` | Vue 3 + Vite + TS + SCSS |
+| `Dockerfile` | образ API + статика |
 
 ## Ограничения
 

@@ -1,0 +1,9 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: "8000"
+    # Перезапуск при падении процесса
+    restart: unless-stopped

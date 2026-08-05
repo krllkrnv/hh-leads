@@ -11,6 +11,7 @@ __pycache__/
 # Secrets & local env
 .env
 .env.local
+.env.*.local
 
 # Exports / locks
 *.xlsx
@@ -19,6 +20,9 @@ __pycache__/
 # Frontend / Node
 node_modules/
 web/dist/
+
+# Docker (локальные дампы образов; Dockerfile коммитим)
+*.tar
 
 # Session / uploads (legacy paths; tool stores reports in-memory)
 uploads/
