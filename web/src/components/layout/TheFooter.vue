@@ -16,7 +16,7 @@ const todayIso = now.toISOString().slice(0, 10)
 </script>
 
 <template>
-  <footer :class="$style.TheFooter">
+  <footer id="hh-footer" :class="$style.TheFooter">
     <div :class="$style.contacts">
       <a :class="$style.link" :href="`mailto:${AUTHOR_EMAIL}`">
         {{ AUTHOR_EMAIL }}

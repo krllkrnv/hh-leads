@@ -2,7 +2,7 @@
 /**
  * Главная страница: сначала экран загрузки, потом дашборд с очередями лидов.
  */
-import { onMounted } from 'vue'
+import { nextTick, onMounted, watch } from 'vue'
 import type { FilterKey } from '@/types/report'
 import TheAppBar from '@/components/layout/TheAppBar.vue'
 import TheFooter from '@/components/layout/TheFooter.vue'
@@ -11,6 +11,7 @@ import LeadFilters from '@/components/leads/LeadFilters.vue'
 import LeadsTable from '@/components/leads/LeadsTable.vue'
 import SummaryCharts from '@/components/leads/SummaryCharts.vue'
 import LiveProgressPanel from '@/components/leads/LiveProgressPanel.vue'
+import { afterPaint, scrollToBottom, scrollToTop } from '@/lib/scrollPage'
 import { useReport } from '@/composables/useReport'
 
 const {
@@ -34,6 +35,28 @@ const {
 onMounted(() => {
   void bootstrap()
 })
+
+/**
+ * Старт анализа — вниз до футера; успешное окончание — обратно наверх к отчёту.
+ */
+watch(
+  () => state.loading,
+  async (loading, wasLoading) => {
+    if (loading) {
+      await nextTick()
+      await afterPaint()
+      scrollToBottom()
+      // Панель прогресса ещё чуть подрастает после transition — догоняем низ.
+      window.setTimeout(() => scrollToBottom(), 320)
+      return
+    }
+    if (wasLoading && state.report && !state.error && !state.showSetup) {
+      await nextTick()
+      await afterPaint()
+      scrollToTop()
+    }
+  },
+)
 
 /**
  * Запускает синхронизацию чатов по cookie из формы входа.

@@ -3,16 +3,9 @@
  * Панель прогресса синхронизации или разбора файла — в потоке страницы, с анимацией появления.
  */
 import { computed, nextTick, ref, watch } from 'vue'
+import type { ProgressLogItem } from '@/composables/useProgressLog'
 import type { ProgressStage } from '@/types/progress'
 import { PROGRESS_STAGES } from '@/types/progress'
-
-type LogItem = {
-  id: number
-  stage: ProgressStage | 'info'
-  message: string
-  company?: string
-  at: number
-}
 
 const props = defineProps<{
   active: boolean
@@ -22,7 +15,7 @@ const props = defineProps<{
   current: number
   total: number
   percent: number
-  logs: LogItem[]
+  logs: ProgressLogItem[]
 }>()
 
 const emit = defineEmits<{

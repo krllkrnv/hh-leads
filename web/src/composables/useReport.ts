@@ -10,59 +10,28 @@ import {
   uploadReportStream,
 } from '@/api/reportRepo'
 import type { ProgressEvent, ProgressStage } from '@/types/progress'
+import { downloadBlob } from '@/lib/downloadBlob'
+import { countByFilter, getLeadsForFilter } from '@/lib/leadBuckets'
 import { matchesProfile } from '@/lib/leadDisplay'
 import {
-  DONE_STORAGE_KEY,
+  useProgressLog,
+  type ProgressLogItem,
+  type ProgressMode,
+} from '@/composables/useProgressLog'
+import {
+  loadDoneMap,
+  loadPrefs,
+  pruneDoneMap,
+  saveDoneMap,
+  savePrefs,
+  type ReportPrefs,
+} from '@/composables/useReportPrefs'
+import {
   EFilterKey,
-  PREFS_STORAGE_KEY,
   type FilterKey,
   type Lead,
   type Report,
 } from '@/types/report'
-
-function loadDoneMap(): Record<string, boolean> {
-  try {
-    return JSON.parse(localStorage.getItem(DONE_STORAGE_KEY) || '{}') as Record<string, boolean>
-  } catch {
-    return {}
-  }
-}
-
-type Prefs = {
-  filter: FilterKey
-  hideClosed: boolean
-  includeKeywords: string
-  excludeKeywords: string
-}
-
-function loadPrefs(): Prefs {
-  const keys = new Set<string>(Object.values(EFilterKey))
-  try {
-    const raw = JSON.parse(localStorage.getItem(PREFS_STORAGE_KEY) || '{}') as Partial<Prefs>
-    const filter = keys.has(String(raw.filter)) ? (raw.filter as FilterKey) : EFilterKey.All
-    return {
-      filter,
-      hideClosed: raw.hideClosed ?? true,
-      includeKeywords: raw.includeKeywords ?? '',
-      excludeKeywords: raw.excludeKeywords ?? '',
-    }
-  } catch {
-    return {
-      filter: EFilterKey.All,
-      hideClosed: true,
-      includeKeywords: '',
-      excludeKeywords: '',
-    }
-  }
-}
-
-type ProgressLogItem = {
-  id: number
-  stage: ProgressStage | 'info'
-  message: string
-  company?: string
-  at: number
-}
 
 type ReportState = {
   report: Report | null
@@ -80,24 +49,8 @@ type ReportState = {
   progressCurrent: number
   progressTotal: number
   progressLogs: ProgressLogItem[]
-  progressMode: 'sync' | 'upload' | null
+  progressMode: ProgressMode
 }
-
-type FilterCounts = Record<FilterKey, number>
-
-const EMPTY_COUNTS: FilterCounts = {
-  [EFilterKey.All]: 0,
-  [EFilterKey.Reply]: 0,
-  [EFilterKey.Call]: 0,
-  [EFilterKey.Interview]: 0,
-  [EFilterKey.Test]: 0,
-  [EFilterKey.Invites]: 0,
-  [EFilterKey.Wait]: 0,
-  [EFilterKey.Bot]: 0,
-  [EFilterKey.Closed]: 0,
-}
-
-const MAX_LOGS = 120
 
 /**
  * Состояние дашборда: синхронизация и загрузка файла, фильтры очередей,
@@ -124,70 +77,29 @@ export function useReport() {
     progressMode: null,
   })
 
-  let logSeq = 0
+  const { progressPercent, resetProgress, handleProgressEvent, clearProgress } =
+    useProgressLog(state)
+
   let abortController: AbortController | null = null
 
   watch(
     () => [state.filter, state.hideClosed, state.includeKeywords, state.excludeKeywords] as const,
     ([filter, hideClosed, includeKeywords, excludeKeywords]) => {
-      localStorage.setItem(
-        PREFS_STORAGE_KEY,
-        JSON.stringify({
-          filter,
-          hideClosed,
-          includeKeywords,
-          excludeKeywords,
-        } satisfies Prefs),
-      )
+      savePrefs({
+        filter,
+        hideClosed,
+        includeKeywords,
+        excludeKeywords,
+      } satisfies ReportPrefs)
     },
   )
 
   const meta = computed(() => state.report?.meta ?? null)
 
-  const progressPercent = computed(() => {
-    if (!state.progressTotal) {
-      return 0
-    }
-    return Math.min(100, Math.round((state.progressCurrent / state.progressTotal) * 100))
-  })
-
-  const filterCounts = computed<FilterCounts>(() => {
-    const leads = state.report?.leads
-    if (!leads) {
-      return { ...EMPTY_COUNTS }
-    }
-    return {
-      [EFilterKey.All]: leads.all.length,
-      [EFilterKey.Reply]: leads.reply.length,
-      [EFilterKey.Call]: leads.contact.length,
-      [EFilterKey.Interview]: leads.interview.length,
-      [EFilterKey.Test]: leads.tests.length,
-      [EFilterKey.Invites]: leads.invites.length,
-      [EFilterKey.Wait]: leads.wait?.length ?? 0,
-      [EFilterKey.Bot]: leads.bot?.length ?? 0,
-      [EFilterKey.Closed]: leads.closed.length,
-    }
-  })
+  const filterCounts = computed(() => countByFilter(state.report))
 
   const visibleLeads = computed<Lead[]>(() => {
-    const leads = state.report?.leads
-    if (!leads) {
-      return []
-    }
-
-    const byFilter: Record<FilterKey, Lead[]> = {
-      [EFilterKey.All]: leads.all,
-      [EFilterKey.Reply]: leads.reply,
-      [EFilterKey.Call]: leads.contact,
-      [EFilterKey.Interview]: leads.interview,
-      [EFilterKey.Test]: leads.tests,
-      [EFilterKey.Invites]: leads.invites,
-      [EFilterKey.Wait]: leads.wait ?? [],
-      [EFilterKey.Bot]: leads.bot ?? [],
-      [EFilterKey.Closed]: leads.closed,
-    }
-
-    const list = byFilter[state.filter] ?? leads.all
+    const list = getLeadsForFilter(state.report, state.filter)
     const q = state.query.trim().toLowerCase()
 
     return list.filter((lead) => {
@@ -209,97 +121,16 @@ export function useReport() {
     })
   })
 
-  function resetProgress(mode: ReportState['progressMode']): void {
-    state.progressMode = mode
-    state.progressStage = 'start'
-    state.progressMessage = mode === 'upload' ? 'Готовлю разбор файла…' : 'Готовлю синхронизацию с hh…'
-    state.progressCurrent = 0
-    state.progressTotal = 0
-    state.progressLogs = []
-    logSeq = 0
+  function applyReport(report: Report): void {
+    state.report = report
+    state.doneMap = pruneDoneMap(state.doneMap, report)
+    saveDoneMap(state.doneMap)
+    state.showSetup = false
   }
 
-  function pushLog(event: ProgressEvent): void {
-    const stage = event.stage || 'info'
-    logSeq += 1
-    state.progressLogs.push({
-      id: logSeq,
-      stage,
-      message: event.message,
-      company: event.company,
-      at: Date.now(),
-    })
-    if (state.progressLogs.length > MAX_LOGS) {
-      state.progressLogs.splice(0, state.progressLogs.length - MAX_LOGS)
-    }
-  }
-
-  function handleProgressEvent(event: ProgressEvent): void {
-    if (event.type === 'error') {
-      pushLog({
-        ...event,
-        stage: 'error',
-        message: event.message,
-      })
-      state.progressStage = 'error'
-      state.progressMessage = event.message
-      return
-    }
-
-    if (event.type === 'progress' || event.stage) {
-      if (event.stage && event.stage !== 'warn') {
-        state.progressStage = event.stage
-      }
-      if (event.message) {
-        state.progressMessage = event.message
-      }
-      if (typeof event.current === 'number') {
-        state.progressCurrent = event.current
-      }
-      if (typeof event.total === 'number') {
-        state.progressTotal = event.total
-      }
-      pushLog(event)
-    }
-
-    if (event.type === 'done') {
-      state.progressStage = 'done'
-      state.progressMessage = event.message || 'Готово'
-      if (state.progressTotal > 0) {
-        state.progressCurrent = state.progressTotal
-      }
-      // Не пишем «Готово» второй раз, если такое сообщение уже есть в логе прогресса.
-      const last = state.progressLogs[state.progressLogs.length - 1]
-      if (!last || last.stage !== 'done') {
-        pushLog({
-          stage: 'done',
-          message: event.message || 'Готово',
-        })
-      }
-    }
-  }
-
-  /**
-   * Убирает из локальных отметок «разобрано» id, которых больше нет в новом отчёте.
-   */
-  function pruneDoneMap(report: Report): void {
-    const ids = new Set(report.leads.all.map((lead) => lead.id))
-    const next: Record<string, boolean> = {}
-    for (const [id, value] of Object.entries(state.doneMap)) {
-      if (ids.has(id) && value) {
-        next[id] = true
-      }
-    }
-    state.doneMap = next
-    localStorage.setItem(DONE_STORAGE_KEY, JSON.stringify(state.doneMap))
-  }
-
-  /**
-   * Запоминает в localStorage, отмечен ли лид как разобранный.
-   */
   function setDone(id: string, value: boolean): void {
     state.doneMap = { ...state.doneMap, [id]: value }
-    localStorage.setItem(DONE_STORAGE_KEY, JSON.stringify(state.doneMap))
+    saveDoneMap(state.doneMap)
   }
 
   function isDone(id: string): boolean {
@@ -313,45 +144,40 @@ export function useReport() {
     state.error = ''
     try {
       const report = await fetchReport()
-      state.report = report
       if (report) {
-        pruneDoneMap(report)
+        state.report = report
+        state.doneMap = pruneDoneMap(state.doneMap, report)
+        saveDoneMap(state.doneMap)
+      } else {
+        state.report = null
       }
     } catch (err) {
       state.error = humanizeError(err instanceof Error ? err.message : String(err))
     }
   }
 
-  async function runSync(cookie: string, days: number, hhHost?: string): Promise<void> {
+  async function runJob(
+    mode: 'sync' | 'upload',
+    task: (signal: AbortSignal, onProgress: (event: ProgressEvent) => void) => Promise<Report>,
+    messages: { aborted: string; mapError?: (err: unknown) => string | null },
+  ): Promise<void> {
     state.loading = true
     state.error = ''
-    resetProgress('sync')
+    resetProgress(mode)
     ensureSessionId()
     abortController = new AbortController()
     try {
-      const report = await syncReportStream(
-        {
-          cookie,
-          days,
-          hhHost: hhHost || undefined,
-        },
-        handleProgressEvent,
-        abortController.signal,
-      )
-      state.report = report
-      pruneDoneMap(report)
-      state.showSetup = false
+      const report = await task(abortController.signal, handleProgressEvent)
+      applyReport(report)
     } catch (err) {
       if (abortController?.signal.aborted) {
-        state.error =
-          'Синхронизацию остановили. Уже разобранные чаты могли сохраниться как частичный отчёт.'
+        state.error = messages.aborted
       } else {
-        const status = (err as Error & { status?: number }).status
-        const raw = err instanceof Error ? err.message : String(err)
-        if (status === 401) {
-          state.error =
-            'Сессия hh больше не действует. Скопируйте cookie из браузера заново и загрузите чаты ещё раз.'
+        const mapped = messages.mapError?.(err)
+        if (mapped) {
+          state.error = mapped
         } else {
+          const raw = err instanceof Error ? err.message : String(err)
           state.error = humanizeError(raw)
         }
       }
@@ -361,28 +187,39 @@ export function useReport() {
     }
   }
 
+  async function runSync(cookie: string, days: number, hhHost?: string): Promise<void> {
+    await runJob(
+      'sync',
+      (signal, onProgress) =>
+        syncReportStream(
+          {
+            cookie,
+            days,
+            hhHost: hhHost || undefined,
+          },
+          onProgress,
+          signal,
+        ),
+      {
+        aborted:
+          'Синхронизацию остановили. Уже разобранные чаты могли сохраниться как частичный отчёт.',
+        mapError: (err) => {
+          const status = (err as Error & { status?: number }).status
+          if (status === 401) {
+            return 'Сессия hh больше не действует. Скопируйте cookie из браузера заново и загрузите чаты ещё раз.'
+          }
+          return null
+        },
+      },
+    )
+  }
+
   async function runUpload(file: File): Promise<void> {
-    state.loading = true
-    state.error = ''
-    resetProgress('upload')
-    ensureSessionId()
-    abortController = new AbortController()
-    try {
-      const report = await uploadReportStream(file, handleProgressEvent, abortController.signal)
-      state.report = report
-      pruneDoneMap(report)
-      state.showSetup = false
-    } catch (err) {
-      if (abortController?.signal.aborted) {
-        state.error = 'Разбор файла остановили.'
-      } else {
-        const raw = err instanceof Error ? err.message : String(err)
-        state.error = humanizeError(raw)
-      }
-    } finally {
-      state.loading = false
-      abortController = null
-    }
+    await runJob(
+      'upload',
+      (signal, onProgress) => uploadReportStream(file, onProgress, signal),
+      { aborted: 'Разбор файла остановили.' },
+    )
   }
 
   async function cancelJob(): Promise<void> {
@@ -404,23 +241,13 @@ export function useReport() {
       const blob = new Blob([JSON.stringify(state.report, null, 2)], {
         type: 'application/json',
       })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `hh-leads-${stamp}.json`
-      a.click()
-      URL.revokeObjectURL(url)
+      downloadBlob(blob, `hh-leads-${stamp}.json`)
       return
     }
 
     try {
       const { blob, filename } = await downloadReportExcel()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = filename || `hh-leads-${stamp}.xlsx`
-      a.click()
-      URL.revokeObjectURL(url)
+      downloadBlob(blob, filename || `hh-leads-${stamp}.xlsx`)
     } catch (err) {
       state.error = humanizeError(err instanceof Error ? err.message : String(err))
     }
@@ -440,10 +267,7 @@ export function useReport() {
     state.report = null
     state.error = ''
     state.showSetup = false
-    state.progressMode = null
-    state.progressLogs = []
-    state.progressMessage = ''
-    state.progressStage = null
+    clearProgress()
   }
 
   return {
