@@ -66,7 +66,7 @@ async function onSync(payload: { cookie: string; days: number; hhHost: string })
 }
 
 /**
- * Разбирает загруженный Excel или JSON и показывает его как отчёт.
+ * Разбор загруженного Excel или JSON: данные становятся текущим отчётом.
  */
 async function onUpload(file: File): Promise<void> {
   await runUpload(file)
