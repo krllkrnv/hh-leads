@@ -207,7 +207,7 @@ function handlePickFile(): void {
   @include fade-up;
   display: grid;
   gap: var(--space-7);
-  padding: clamp(2.5rem, 8vh, 5rem) 0 var(--space-6);
+  padding: var(--space-4) 0 var(--space-4);
   align-content: start;
 }
 

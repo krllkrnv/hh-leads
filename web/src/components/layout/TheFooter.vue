@@ -7,12 +7,8 @@ const AUTHOR_TELEGRAM = 'kkorneev02'
 const AUTHOR_GITHUB = 'krllkrnv'
 
 const now = new Date()
-const todayLabel = new Intl.DateTimeFormat('ru-RU', {
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-}).format(now)
-const todayIso = now.toISOString().slice(0, 10)
+const yearLabel = String(now.getFullYear())
+const yearIso = yearLabel
 </script>
 
 <template>
@@ -40,7 +36,7 @@ const todayIso = now.toISOString().slice(0, 10)
         GitHub
       </a>
     </div>
-    <time :class="$style.date" :datetime="todayIso">{{ todayLabel }}</time>
+    <time :class="$style.date" :datetime="yearIso">{{ yearLabel }}</time>
   </footer>
 </template>
 
