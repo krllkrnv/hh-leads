@@ -104,8 +104,8 @@ function handlePickFile(): void {
               и скопируй её значение целиком.
             </li>
             <li>
-              Вставь сюда. Формат не важен: подойдёт и строка Cookie, и таблица из Application →
-              Cookies — разберём сами. Нужны
+              Вставь сюда. Формат не важен: строка Cookie, JSON «Request Cookies» из DevTools или
+              таблица из Application → Cookies — разберём сами. Нужны
               <span :class="$style.code">hhtoken</span>
               и
               <span :class="$style.code">_xsrf</span>.
@@ -119,7 +119,7 @@ function handlePickFile(): void {
             v-model="cookie"
             :class="$style.textarea"
             rows="5"
-            placeholder="Вставь строку Cookie или таблицу целиком, например: hhtoken=…; _xsrf=…"
+            placeholder="Cookie-строка или JSON Request Cookies — например: hhtoken=…; _xsrf=…"
             required
             autocomplete="off"
             spellcheck="false"

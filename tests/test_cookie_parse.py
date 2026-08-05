@@ -44,3 +44,34 @@ redirect_host	"example.hh.ru"
     assert mapped["hhtoken"] == "tok123"
     assert mapped["_xsrf"] == "xsrf456"
     assert suggest_hh_host_from_cookie(raw) == "https://example.hh.ru"
+
+
+def test_normalize_devtools_request_cookies_json() -> None:
+    raw = """
+    {
+      "Request Cookies": {
+        "__ddg1_": "noise",
+        "hhtoken": "json_tok_abc",
+        "_xsrf": "json_xsrf_def",
+        "hhuid": "uid--",
+        "hhrole": "applicant",
+        "redirect_host": "spb.hh.ru",
+        "filters1": "{\\"showFilters\\":false}"
+      }
+    }
+    """
+    mapped = parse_cookie_map(raw)
+    assert mapped["hhtoken"] == "json_tok_abc"
+    assert mapped["_xsrf"] == "json_xsrf_def"
+    assert mapped["redirect_host"] == "spb.hh.ru"
+    normalized = normalize_cookie(raw)
+    assert "hhtoken=json_tok_abc" in normalized
+    assert "_xsrf=json_xsrf_def" in normalized
+    assert suggest_hh_host_from_cookie(raw) == "https://spb.hh.ru"
+
+
+def test_normalize_flat_cookie_json() -> None:
+    raw = '{"hhtoken": "flat_tok", "_xsrf": "flat_xsrf"}'
+    mapped = parse_cookie_map(raw)
+    assert mapped["hhtoken"] == "flat_tok"
+    assert mapped["_xsrf"] == "flat_xsrf"

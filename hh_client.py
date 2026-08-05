@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import time
 from datetime import datetime, timezone
@@ -64,10 +65,47 @@ def _is_cookie_name(name: str) -> bool:
     return bool(_COOKIE_NAME_RE.match(key))
 
 
+_JSON_COOKIE_WRAPPERS = (
+    "Request Cookies",
+    "requestCookies",
+    "Request cookies",
+    "Cookies",
+    "cookies",
+    "Cookie",
+    "cookie",
+)
+
+
+def _cookie_dict_from_json(data: dict[str, Any]) -> dict[str, str]:
+    """Достаёт name→value из JSON DevTools (в т.ч. обёртка Request Cookies)."""
+    blob: dict[str, Any] = data
+    for key in _JSON_COOKIE_WRAPPERS:
+        inner = data.get(key)
+        if isinstance(inner, dict) and inner:
+            blob = inner
+            break
+
+    out: dict[str, str] = {}
+    for raw_name, raw_value in blob.items():
+        name = str(raw_name).strip()
+        if not _is_cookie_name(name):
+            continue
+        if isinstance(raw_value, (dict, list)):
+            continue
+        if raw_value is None:
+            continue
+        value = _strip_wrapping_quotes(str(raw_value))
+        if not value:
+            continue
+        out[name] = value
+    return out
+
+
 def parse_cookie_map(raw: str) -> dict[str, str]:
     """
     Достаёт пары cookie из разных форматов вставки:
     - заголовок Cookie: hhtoken=…; _xsrf=…
+    - JSON Request Cookies / плоский объект name→value из DevTools
     - таблица Application → Cookies (name / value / domain…)
     - строки name\\tvalue
     """
@@ -90,6 +128,18 @@ def parse_cookie_map(raw: str) -> dict[str, str]:
         if key in found and len(found[key]) >= len(val):
             return
         found[key] = val
+
+    # 0) JSON из DevTools («Copy» у Request Cookies или весь объект)
+    if text.startswith("{") or text.startswith("["):
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, dict):
+            for key, value in _cookie_dict_from_json(parsed).items():
+                put(key, value)
+            if found:
+                return found
 
     # 1) Классика: key=value; key=value (в т.ч. с переносами)
     for part in re.split(r"[;\n\r]+", text):
