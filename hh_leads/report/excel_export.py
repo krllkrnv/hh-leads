@@ -10,9 +10,9 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
-from classify import ACTION_PRIORITY, ChatRecord
-from report_common import fmt_dt
-from report_model import action_counts
+from hh_leads.classify import ACTION_PRIORITY, ChatRecord
+from hh_leads.report.common import fmt_dt
+from hh_leads.report.model import action_counts
 
 COLUMNS = [
     "Компания",

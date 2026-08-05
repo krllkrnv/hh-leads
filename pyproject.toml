@@ -22,6 +22,9 @@ dev = [
 testpaths = ["tests"]
 pythonpath = ["."]
 
+[project.scripts]
+hh-leads = "hh_leads.cli:main"
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

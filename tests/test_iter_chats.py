@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import MagicMock
 
-from hh_client import ChatikClient, SyncCancelled
+from hh_leads.hh_client import ChatikClient, SyncCancelled
 
 
 def _chat(chat_id: str, hours_ago: float | None) -> dict[str, Any]:

@@ -10,11 +10,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
-from classify import ChatRecord
-from hh_client import HhApiError, HhAuthError
-from pipeline import PartialSync, fetch_records
-from progress import ProgressEvent, emit
-from report import build_report, records_from_excel
+from hh_leads.classify import ChatRecord
+from hh_leads.hh_client import HhApiError, HhAuthError
+from hh_leads.pipeline import PartialSync, fetch_records
+from hh_leads.progress import ProgressEvent, emit
+from hh_leads.report import build_report, records_from_excel
 
 
 @dataclass

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from classify import classify, extract_messages, match_reasons, INVITE_RE
-from hh_client import resolve_messages_block
-from report import lead_tag
+from hh_leads.classify import classify, extract_messages, match_reasons, INVITE_RE
+from hh_leads.hh_client import resolve_messages_block
+from hh_leads.report import lead_tag
 from tests.test_report_buckets import _rec
 
 

@@ -8,8 +8,8 @@ from typing import Any
 
 from openpyxl import load_workbook
 
-from classify import CLOSED_RE, STRONG_CONTACT_RE, ChatRecord, match_reasons
-from report_common import STATE_ID_BY_NAME, chat_id_from_url, parse_excel_dt
+from hh_leads.classify import CLOSED_RE, STRONG_CONTACT_RE, ChatRecord, match_reasons
+from hh_leads.report.common import STATE_ID_BY_NAME, chat_id_from_url, parse_excel_dt
 
 
 def _sheet_dicts(ws) -> list[dict[str, Any]]:

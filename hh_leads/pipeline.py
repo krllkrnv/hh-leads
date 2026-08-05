@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from classify import ChatRecord, classify, extract_messages, extract_meta
-from hh_client import ChatikClient, SyncCancelled, suggest_hh_host_from_cookie
-from progress import ProgressCb, emit
+from hh_leads.classify import ChatRecord, classify, extract_messages, extract_meta
+from hh_leads.hh_client import ChatikClient, SyncCancelled, suggest_hh_host_from_cookie
+from hh_leads.progress import ProgressCb, emit
 
 
 class PartialSync(Exception):

@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from api import _is_valid_report, _safe_dist_file
-from classify import ChatRecord
-from report import build_report, lead_tag
+from hh_leads.api import _is_valid_report, _safe_dist_file
+from hh_leads.classify import ChatRecord
+from hh_leads.report import build_report, lead_tag
 
 
 def _rec(**kwargs: object) -> ChatRecord:
@@ -67,7 +67,7 @@ def test_build_report_all_includes_wait() -> None:
 
 def test_safe_dist_blocks_traversal(tmp_path: Path, monkeypatch: object) -> None:
     # Function uses module WEB_DIST; skip if dist missing — just assert helper rejects ..
-    from api import WEB_DIST_RESOLVED
+    from hh_leads.api import WEB_DIST_RESOLVED
 
     assert WEB_DIST_RESOLVED.name == "dist"
     # Path outside dist must be None

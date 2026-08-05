@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from classify import ChatRecord
-from report_common import STATE_ID_BY_NAME, chat_id_from_url, parse_excel_dt
+from hh_leads.classify import ChatRecord
+from hh_leads.report.common import STATE_ID_BY_NAME, chat_id_from_url, parse_excel_dt
 
 
 def records_from_report(report: dict[str, Any]) -> tuple[list[ChatRecord], int, datetime]:

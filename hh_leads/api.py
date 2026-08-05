@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
-from jobs import (
+from hh_leads.jobs import (
     build_sync_report,
     check_upload_cancel,
     is_valid_report as _is_valid_report,
@@ -23,9 +23,9 @@ from jobs import (
     report_from_upload,
     run_fetch,
 )
-from progress import ProgressEvent, emit
-from report import records_from_report, write_excel
-from session_store import (
+from hh_leads.progress import ProgressEvent, emit
+from hh_leads.report import records_from_report, write_excel
+from hh_leads.session_store import (
     cancel_event,
     clear_session as store_clear_session,
     get_report,
@@ -33,9 +33,9 @@ from session_store import (
     session_id,
     store_report,
 )
-from streaming import stream_job
+from hh_leads.streaming import stream_job
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 WEB_DIST = ROOT / "web" / "dist"
 WEB_DIST_RESOLVED = WEB_DIST.resolve()
 

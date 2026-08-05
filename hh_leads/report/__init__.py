@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from excel_export import (
+from hh_leads.report.excel_export import (
     ACTION_COLUMNS,
     COLUMNS,
     action_row,
@@ -10,10 +10,10 @@ from excel_export import (
     record_row,
     write_excel,
 )
-from excel_import import records_from_excel
-from report_common import STATE_ID_BY_NAME, chat_id_from_url, fmt_dt, parse_excel_dt
-from report_model import build_report, clean_why, lead_tag, record_to_lead
-from report_roundtrip import records_from_report
+from hh_leads.report.excel_import import records_from_excel
+from hh_leads.report.common import STATE_ID_BY_NAME, chat_id_from_url, fmt_dt, parse_excel_dt
+from hh_leads.report.model import build_report, clean_why, lead_tag, record_to_lead
+from hh_leads.report.roundtrip import records_from_report
 
 __all__ = [
     "ACTION_COLUMNS",

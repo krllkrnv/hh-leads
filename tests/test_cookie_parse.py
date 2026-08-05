@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from hh_client import cookie_value, normalize_cookie, parse_cookie_map, suggest_hh_host_from_cookie
+from hh_leads.hh_client import cookie_value, normalize_cookie, parse_cookie_map, suggest_hh_host_from_cookie
 
 
 def test_normalize_classic_header() -> None:

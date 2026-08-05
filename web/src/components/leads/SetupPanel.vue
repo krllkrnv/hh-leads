@@ -70,7 +70,7 @@ function handlePickFile(): void {
       <p :class="$style.lead">
         Разбирает переписки с работодателями на hh.ru: приглашения, тестовые и то, где ещё
         ожидается ваш ответ. Чаты подтягиваются по cookie из браузера. Если отчёт уже скачан из
-        дашборда раньше, cookie не нужен — откройте файл справа.
+        дашборда раньше, cookie не нужен — достаточно открыть файл справа.
       </p>
       <div :class="$style.accentLine" aria-hidden="true" />
     </header>
@@ -81,30 +81,30 @@ function handlePickFile(): void {
           <h2 :class="$style.sectionTitle">Загрузить чаты с hh</h2>
           <ol :class="$style.steps">
             <li>
-              Открой
+              Открыть
               <a href="https://hh.ru" target="_blank" rel="noreferrer">hh.ru</a>
-              и войди в аккаунт.
+              и войти в аккаунт.
             </li>
             <li>
-              Нажми
+              Нажать
               <span :class="$style.code">F12</span>
               — откроются инструменты разработчика.
             </li>
             <li>
-              Открой вкладку
+              Открыть вкладку
               <span :class="$style.code">Network</span>
-              (Сеть) и нажми
+              (Сеть) и нажать
               <span :class="$style.code">Ctrl+R</span>, чтобы страница перезагрузилась и в списке
               появились запросы.
             </li>
-            <li>Кликни любой запрос к hh.ru в списке.</li>
+            <li>Выбрать любой запрос к hh.ru в списке.</li>
             <li>
-              В блоке заголовков запроса найди строку
+              В блоке заголовков запроса найти строку
               <span :class="$style.code">Cookie</span>
-              и скопируй её значение целиком.
+              и скопировать её значение целиком.
             </li>
             <li>
-              Вставь сюда. Формат не важен: строка Cookie, JSON «Request Cookies» из DevTools или
+              Вставить сюда. Формат не важен: строка Cookie, JSON «Request Cookies» из DevTools или
               таблица из Application → Cookies — разберём сами. Нужны
               <span :class="$style.code">hhtoken</span>
               и

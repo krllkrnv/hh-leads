@@ -14,7 +14,7 @@ case "$cmd" in
     cd "$ROOT"
     # shellcheck disable=SC1091
     source .venv/bin/activate
-    exec uvicorn api:app --reload --host 127.0.0.1 --port 8000
+    exec uvicorn hh_leads.api:app --reload --host 127.0.0.1 --port 8000
     ;;
   web)
     cd "$ROOT/web"

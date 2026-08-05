@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
-from hh_client import ChatikClient, parse_dt, resolve_messages_block
+from hh_leads.hh_client import ChatikClient, parse_dt, resolve_messages_block
 
 INVITE_PATTERNS = [
     r"приглаша",

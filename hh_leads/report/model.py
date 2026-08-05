@@ -6,8 +6,8 @@ import re
 from datetime import datetime
 from typing import Any
 
-from classify import ChatRecord
-from report_common import chat_id_from_url, fmt_dt
+from hh_leads.classify import ChatRecord
+from hh_leads.report.common import chat_id_from_url, fmt_dt
 
 
 def lead_tag(rec: ChatRecord) -> str:

@@ -9,10 +9,10 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from classify import ChatRecord
-from hh_client import HhApiError, HhAuthError
-from pipeline import fetch_records
-from report import write_excel
+from hh_leads.classify import ChatRecord
+from hh_leads.hh_client import HhApiError, HhAuthError
+from hh_leads.pipeline import fetch_records
+from hh_leads.report import write_excel
 
 
 def print_action_report(records: list[ChatRecord]) -> None:
@@ -70,7 +70,7 @@ def analyze(cookie: str, days: int, out_path: Path, delay: float, hh_host: str |
 
 
 def main() -> None:
-    root = Path(__file__).resolve().parent
+    root = Path(__file__).resolve().parents[1]
     load_dotenv(root / ".env")
     load_dotenv()
 
