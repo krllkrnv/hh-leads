@@ -26,8 +26,9 @@ INVITE_PATTERNS = [
     r"приглас\w*\s+на\s+(собесед|интервью|встреч)",
     r"позвон(ите|ить|ю|им)\b",
     r"перезвон(ите|ить|ю|им)\b",
-    r"свяж(итесь|ёмся|емся)",
-    r"связаться",
+    # Только «свяжитесь» (просьба к кандидату). «Свяжемся / свяжемся» —
+    # шаблон «рассмотрим и свяжемся», не live invite.
+    r"свяжитесь",
     r"напишите\s+(нам|мне|пожалуйста|когда|в\s)",
     r"\bпишите\s+(нам|мне|в\s+telegram|в\s+телеграм)",
     r"написать\s+(мне|нам|в\s+telegram|в\s+телеграм)",
@@ -375,8 +376,10 @@ def detect_action(
             last_from,
         )
 
-    if test_reasons or meta.get("has_test_resource"):
-        detail = "; ".join(test_reasons[:3]) or "тестовое в ресурсах"
+    # Только текстовые признаки теста. Флаги вакансии userTestPresent / test_solutions
+    # на hh часто есть без задания в чате (см. отклик без ответа HR).
+    if test_reasons:
+        detail = "; ".join(test_reasons[:3])
         if last_from == "работодатель":
             return "Тестовое задание", f"похоже, ждут решение · {detail}", last_from
         if last_from == "я":
@@ -477,8 +480,8 @@ def classify(meta: dict[str, Any], messages: list[dict[str, Any]]) -> ChatRecord
 
     invite_reasons.extend(f"текст: «{r}»" for r in match_reasons(corpus, INVITE_RE))
     test_reasons.extend(f"текст: «{r}»" for r in match_reasons(corpus, TEST_RE))
-    if meta.get("has_test_resource"):
-        test_reasons.append("ресурс test_solutions / userTestPresent")
+    # has_test_resource (userTestPresent / test_solutions) — только meta-флаг вакансии;
+    # в test_reasons и категорию «Тестовые» не кладём без текста от HR.
 
     invite_reasons = list(dict.fromkeys(invite_reasons))
     test_reasons = list(dict.fromkeys(test_reasons))

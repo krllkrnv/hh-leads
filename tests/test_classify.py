@@ -340,3 +340,130 @@ def test_text_closed_beats_invite() -> None:
     rec = classify(meta, messages)
     assert rec.action == "Отказ / закрыто"
     assert lead_tag(rec) == "closed"
+
+
+def test_svyazhemsya_template_is_not_invite() -> None:
+    """Шаблон «рассмотрим и свяжемся» — не live invite."""
+    assert not match_reasons(
+        "Спасибо за отклик! Мы рассмотрим резюме и свяжемся с вами.",
+        INVITE_RE,
+    )
+    assert not match_reasons("Свяжемся в ближайшее время.", INVITE_RE)
+    assert match_reasons("Пожалуйста, свяжитесь с нами по телефону", INVITE_RE)
+
+    meta = {
+        "id": "9",
+        "company": "Iota",
+        "vacancy_name": "FE",
+        "vacancy_url": "",
+        "chat_url": "https://hh.ru/chat/9",
+        "state_id": "response",
+        "state_name": "Отклик",
+        "updated_at": None,
+        "has_test_resource": False,
+    }
+    messages = [
+        {
+            "text": (
+                "Здравствуйте! Компания рассмотрит Ваше резюме и позже "
+                "сообщит Вам о своем решении. Свяжемся с вами."
+            ),
+            "created_at": "2024-06-01T10:00:00+03:00",
+            "author": "HR",
+            "is_me": False,
+            "is_bot": False,
+            "workflow_state": None,
+        }
+    ]
+    rec = classify(meta, messages)
+    assert "Приглашения" not in rec.categories
+    assert rec.action == "Ответить работодателю"
+    assert lead_tag(rec) == "reply"
+
+
+def test_svyazhites_still_invite_and_call() -> None:
+    meta = {
+        "id": "10",
+        "company": "Kappa",
+        "vacancy_name": "FE",
+        "vacancy_url": "",
+        "chat_url": "https://hh.ru/chat/10",
+        "state_id": "response",
+        "state_name": "Отклик",
+        "updated_at": None,
+        "has_test_resource": False,
+    }
+    messages = [
+        {
+            "text": "Добрый день! Свяжитесь с нами, пожалуйста",
+            "created_at": "2024-06-01T10:00:00+03:00",
+            "author": "HR",
+            "is_me": False,
+            "is_bot": False,
+            "workflow_state": None,
+        }
+    ]
+    rec = classify(meta, messages)
+    assert "Приглашения" in rec.categories
+    assert rec.strong_contact is True
+    assert rec.action == "Собеседование / встреча"
+
+
+def test_interview_status_still_invite_with_svyazhemsya() -> None:
+    """Статус interview — hard signal; шаблон «свяжемся» рядом не ломает."""
+    meta = {
+        "id": "11",
+        "company": "Lambda",
+        "vacancy_name": "FE",
+        "vacancy_url": "",
+        "chat_url": "https://hh.ru/chat/11",
+        "state_id": "interview",
+        "state_name": "Собеседование",
+        "updated_at": None,
+        "has_test_resource": False,
+    }
+    messages = [
+        {
+            "text": "Мы рассмотрим резюме и свяжемся",
+            "created_at": "2024-06-01T10:00:00+03:00",
+            "author": "HR",
+            "is_me": False,
+            "is_bot": False,
+            "workflow_state": None,
+        }
+    ]
+    rec = classify(meta, messages)
+    assert "Приглашения" in rec.categories
+    assert any("статус: interview" in r for r in rec.invite_reasons)
+    assert rec.action == "Собеседование / встреча"
+
+
+def test_vacancy_test_flag_alone_not_category() -> None:
+    """userTestPresent / test_solutions без текста HR не дают «Тестовые»."""
+    meta = {
+        "id": "12",
+        "company": "Московская Биржа",
+        "vacancy_name": "Frontend-разработчик",
+        "vacancy_url": "",
+        "chat_url": "https://hh.ru/chat/12",
+        "state_id": "response",
+        "state_name": "Отклик",
+        "updated_at": None,
+        "has_test_resource": True,
+    }
+    messages = [
+        {
+            "text": "Здравствуйте! Три года frontend. Telegram: @user",
+            "created_at": "2024-06-01T10:00:00+03:00",
+            "author": "я",
+            "is_me": True,
+            "is_bot": False,
+            "workflow_state": None,
+        }
+    ]
+    rec = classify(meta, messages)
+    assert "Тестовые" not in rec.categories
+    assert rec.test_reasons == []
+    assert rec.action == "Ждать ответа HR"
+    assert "после теста" not in rec.action_detail
+    assert lead_tag(rec) == "wait"
