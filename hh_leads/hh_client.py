@@ -440,10 +440,10 @@ class ChatikClient:
     ) -> list[dict[str, Any]]:
         """Список чатов, у которых последняя активность не старше since.
 
-        После страницы, где встретился более старый чат, следующие страницы
-        не запрашиваем (Chatik обычно отдаёт список от новых к старым).
-        Внутри страницы смотрим все элементы: «молодые» после «старых»
-        не теряем. Чаты без даты активности в окно не попадают.
+        Chatik не гарантирует порядок от новых к старым по lastActivityTime:
+        на одной странице и между страницами свежие чаты могут стоять после
+        старых. Поэтому обходим все страницы списка и фильтруем по since
+        локально. Чаты без даты активности в окно не попадают.
         """
         items: list[dict[str, Any]] = []
         page = 0
@@ -467,15 +467,11 @@ class ChatikClient:
             if not chunk:
                 break
 
-            stop = False
             for chat in chunk:
                 activity = parse_dt(chat.get("lastActivityTime")) or parse_dt(
                     (chat.get("lastMessage") or {}).get("creationTime")
                 )
-                if activity is None:
-                    continue
-                if activity < since:
-                    stop = True
+                if activity is None or activity < since:
                     continue
                 chat_id = str(chat.get("id") or "")
                 items.append(
@@ -490,13 +486,9 @@ class ChatikClient:
                 on_page(page, len(items))
 
             pages = chats_block.get("pages")
-            if stop:
-                break
             if pages is not None:
-                if page >= pages - 1:
+                if page >= int(pages) - 1:
                     break
-            elif not chunk:
-                break
             page += 1
         return items
 

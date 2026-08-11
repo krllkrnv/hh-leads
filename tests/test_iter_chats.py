@@ -1,4 +1,4 @@
-"""Тесты early-stop пагинации списка чатов."""
+"""Тесты пагинации списка чатов без early-stop по возрасту."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ def _chat(chat_id: str, hours_ago: float | None) -> dict[str, Any]:
     return chat
 
 
-def test_iter_chats_scans_full_page_before_stop() -> None:
+def test_iter_chats_keeps_young_after_old_on_same_page() -> None:
     """На странице со смешанным порядком «молодые» после «старых» не теряются."""
     since = datetime.now(timezone.utc) - timedelta(days=7)
     client = ChatikClient.__new__(ChatikClient)
@@ -27,7 +27,7 @@ def test_iter_chats_scans_full_page_before_stop() -> None:
                 "items": [
                     _chat("new1", 1),
                     _chat("old1", 24 * 30),
-                    _chat("new2", 2),  # после old — всё равно в окне
+                    _chat("new2", 2),
                 ],
                 "pages": 1,
             },
@@ -39,6 +39,41 @@ def test_iter_chats_scans_full_page_before_stop() -> None:
     items = ChatikClient.iter_chats(client, since)
     ids = [e["chat"]["id"] for e in items]
     assert ids == ["new1", "new2"]
+
+
+def test_iter_chats_continues_after_old_chat_on_earlier_page() -> None:
+    """Старый чат на ранней странице не обрывает пагинацию: следующие страницы читаем."""
+    since = datetime.now(timezone.utc) - timedelta(days=7)
+    client = ChatikClient.__new__(ChatikClient)
+    pages = [
+        {
+            "chats": {
+                "items": [
+                    _chat("new1", 1),
+                    _chat("old1", 24 * 30),
+                ],
+                "pages": 2,
+            },
+            "chatsDisplayInfo": {},
+            "resources": {},
+        },
+        {
+            "chats": {
+                "items": [
+                    _chat("new2", 3),
+                    _chat("old2", 24 * 40),
+                ],
+                "pages": 2,
+            },
+            "chatsDisplayInfo": {},
+            "resources": {},
+        },
+    ]
+    client._get = MagicMock(side_effect=pages)  # type: ignore[method-assign]
+    items = ChatikClient.iter_chats(client, since)
+    ids = [e["chat"]["id"] for e in items]
+    assert ids == ["new1", "new2"]
+    assert client._get.call_count == 2
 
 
 def test_iter_chats_skips_null_activity() -> None:

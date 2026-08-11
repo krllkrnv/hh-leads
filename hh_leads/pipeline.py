@@ -80,7 +80,7 @@ def fetch_records(
             emit(
                 on_progress,
                 "list",
-                f"Страница {page + 1}: в выборке уже {collected} чатов",
+                f"Страница списка {page + 1}: в окне {days} дн. уже {collected} чатов",
                 current=collected,
             )
 
