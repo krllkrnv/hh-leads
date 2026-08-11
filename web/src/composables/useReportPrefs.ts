@@ -1,4 +1,11 @@
-import { DONE_STORAGE_KEY, PREFS_STORAGE_KEY, EFilterKey, type FilterKey } from '@/types/report'
+import {
+  DEFAULT_SYNC_DAYS,
+  DONE_STORAGE_KEY,
+  PREFS_STORAGE_KEY,
+  EFilterKey,
+  clampSyncDays,
+  type FilterKey,
+} from '@/types/report'
 import type { Report } from '@/types/report'
 
 export type ReportPrefs = {
@@ -6,6 +13,7 @@ export type ReportPrefs = {
   hideClosed: boolean
   includeKeywords: string
   excludeKeywords: string
+  days: number
 }
 
 export function loadDoneMap(): Record<string, boolean> {
@@ -30,6 +38,7 @@ export function loadPrefs(): ReportPrefs {
       hideClosed: raw.hideClosed ?? true,
       includeKeywords: raw.includeKeywords ?? '',
       excludeKeywords: raw.excludeKeywords ?? '',
+      days: raw.days === undefined ? DEFAULT_SYNC_DAYS : clampSyncDays(raw.days),
     }
   } catch {
     return {
@@ -37,6 +46,7 @@ export function loadPrefs(): ReportPrefs {
       hideClosed: true,
       includeKeywords: '',
       excludeKeywords: '',
+      days: DEFAULT_SYNC_DAYS,
     }
   }
 }

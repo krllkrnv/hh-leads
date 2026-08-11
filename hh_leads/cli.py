@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from hh_leads.classify import ChatRecord
 from hh_leads.hh_client import HhApiError, HhAuthError
 from hh_leads.pipeline import fetch_records
-from hh_leads.report import write_excel
+from hh_leads.report import fmt_dt, write_excel
 
 
 def print_action_report(records: list[ChatRecord]) -> None:
@@ -56,15 +56,21 @@ def print_action_report(records: list[ChatRecord]) -> None:
 
 
 def analyze(cookie: str, days: int, out_path: Path, delay: float, hh_host: str | None = None) -> Path:
-    records, since = fetch_records(
+    records, since, stats = fetch_records(
         cookie,
         days,
         delay=delay,
         hh_host=hh_host,
         on_progress=lambda event: print(event.get("message", event), flush=True),
     )
-    write_excel(records, out_path, days, since)
+    write_excel(records, out_path, days, since, stats=stats)
     print(f"Готово: {out_path}")
+    print(
+        f"Окно {days} дн. по полю {stats.field}: "
+        f"просмотрено {stats.scanned}, взято {stats.kept}"
+    )
+    if stats.oldest and stats.newest:
+        print(f"Даты сообщений в выборке: {fmt_dt(stats.oldest)} … {fmt_dt(stats.newest)}")
     print_action_report(records)
     return out_path
 

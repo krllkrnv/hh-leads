@@ -12,7 +12,7 @@ from typing import Any, Callable
 
 from hh_leads.classify import ChatRecord
 from hh_leads.hh_client import HhApiError, HhAuthError
-from hh_leads.pipeline import PartialSync, fetch_records
+from hh_leads.pipeline import PartialSync, SyncStats, fetch_records
 from hh_leads.progress import ProgressEvent, emit
 from hh_leads.report import build_report, records_from_excel
 
@@ -23,6 +23,7 @@ class SyncOutcome:
     since: datetime
     incomplete: bool
     done_msg: str
+    stats: SyncStats
 
 
 def is_valid_report(data: Any) -> bool:
@@ -47,7 +48,7 @@ def run_fetch(
 ) -> SyncOutcome:
     """Тянет чаты и классифицирует. PartialSync → incomplete=True, не исключение."""
     try:
-        records, since = fetch_records(
+        records, since, stats = fetch_records(
             cookie,
             days,
             delay=delay,
@@ -60,6 +61,7 @@ def run_fetch(
             since=since,
             incomplete=False,
             done_msg="Готово — отчёт собран",
+            stats=stats,
         )
     except PartialSync as partial:
         records, since = partial.records, partial.since
@@ -75,6 +77,7 @@ def run_fetch(
             since=since,
             incomplete=True,
             done_msg=done_msg,
+            stats=partial.stats,
         )
 
 
@@ -89,6 +92,7 @@ def build_sync_report(
         since=outcome.since,
         source="sync",
         incomplete=outcome.incomplete,
+        stats=outcome.stats,
     )
 
 

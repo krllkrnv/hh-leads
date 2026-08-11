@@ -93,6 +93,7 @@ async function onReset(): Promise<void> {
       v-if="!state.report || state.showSetup"
       :loading="state.loading"
       :can-cancel-setup="Boolean(state.report)"
+      :days="state.syncDays"
       @sync="onSync"
       @upload="onUpload"
       @cancel-setup="closeSetup"

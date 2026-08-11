@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Iterable
 
-from hh_leads.hh_client import ChatikClient, parse_dt, resolve_messages_block
+from hh_leads.hh_client import ChatikClient, chat_activity_at, parse_dt, resolve_messages_block
 
 INVITE_PATTERNS = [
     r"приглаша",
@@ -239,9 +239,7 @@ def extract_meta(
     if isinstance(vacancy.get("userTestPresent"), bool) and vacancy["userTestPresent"]:
         has_test = True
 
-    updated_at = parse_dt(chat.get("lastActivityTime")) or parse_dt(
-        (chat.get("lastMessage") or {}).get("creationTime")
-    )
+    updated_at = chat_activity_at(chat)
 
     return {
         "id": chat_id,

@@ -6,11 +6,18 @@ import { ref } from 'vue'
 import BrandTitle from '@/components/ui/BrandTitle.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiTextInput from '@/components/ui/UiTextInput.vue'
-import { DEFAULT_SYNC_DAYS, EButtonVariant } from '@/types/report'
+import {
+  DEFAULT_SYNC_DAYS,
+  EButtonVariant,
+  MAX_SYNC_DAYS,
+  MIN_SYNC_DAYS,
+  clampSyncDays,
+} from '@/types/report'
 
 const props = defineProps<{
   loading?: boolean
   canCancelSetup?: boolean
+  days?: number
 }>()
 
 const emit = defineEmits<{
@@ -20,7 +27,7 @@ const emit = defineEmits<{
 }>()
 
 const cookie = ref('')
-const days = ref(String(DEFAULT_SYNC_DAYS))
+const days = ref(String(props.days ?? DEFAULT_SYNC_DAYS))
 const hhHost = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
 const fileName = ref('')
@@ -32,7 +39,7 @@ const fileName = ref('')
  * успешно загрузится, этот экран просто скроется вместе с полем.
  */
 function handleSync(): void {
-  const clamped = Math.min(180, Math.max(1, Number(days.value) || DEFAULT_SYNC_DAYS))
+  const clamped = clampSyncDays(days.value)
   days.value = String(clamped)
   emit('sync', {
     cookie: cookie.value.trim(),
@@ -129,7 +136,7 @@ function handlePickFile(): void {
         <div :class="$style.row">
           <label :class="$style.field">
             <span :class="$style.fieldLabel">За сколько дней</span>
-            <UiTextInput v-model="days" type="number" min="1" max="180" />
+            <UiTextInput v-model="days" type="number" :min="MIN_SYNC_DAYS" :max="MAX_SYNC_DAYS" />
           </label>
           <label :class="$style.field">
             <span :class="$style.fieldLabel">Сайт hh</span>
@@ -137,8 +144,9 @@ function handlePickFile(): void {
           </label>
         </div>
         <p :class="$style.hint">
-          Берутся чаты, в которых что-то происходило за выбранный срок (последнее сообщение или
-          активность). Дата отклика на вакансию тут не учитывается. Можно указать от 1 до 180 дней.
+          Берутся чаты, где за выбранный срок было хотя бы одно сообщение. Дата отклика на вакансию
+          и отметки о прочтении чата не учитываются. Можно указать от {{ MIN_SYNC_DAYS }} до
+          {{ MAX_SYNC_DAYS }} дней.
         </p>
 
         <div :class="$style.actions">

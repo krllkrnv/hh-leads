@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from hh_leads.classify import ChatRecord
 from hh_leads.report.common import chat_id_from_url, fmt_dt
+
+if TYPE_CHECKING:
+    from hh_leads.pipeline import SyncStats
 
 
 def lead_tag(rec: ChatRecord) -> str:
@@ -93,6 +96,21 @@ def action_counts(records: list[ChatRecord]) -> dict[str, int]:
     return counts
 
 
+def window_info(stats: SyncStats | None) -> dict[str, Any] | None:
+    """Что именно отфильтровали: по какому полю, сколько просмотрено и какие даты попали."""
+    if stats is None:
+        return None
+    return {
+        "field": stats.field,
+        "scanned": stats.scanned,
+        "kept": stats.kept,
+        "pagesRead": stats.pages_read,
+        "stoppedEarly": stats.stopped_early,
+        "oldest": fmt_dt(stats.oldest),
+        "newest": fmt_dt(stats.newest),
+    }
+
+
 def build_report(
     records: list[ChatRecord],
     *,
@@ -100,6 +118,7 @@ def build_report(
     since: datetime | None = None,
     source: str = "sync",
     incomplete: bool = False,
+    stats: SyncStats | None = None,
 ) -> dict[str, Any]:
     counts = category_counts(records)
     action_counts_map = action_counts(records)
@@ -135,11 +154,11 @@ def build_report(
         key=lambda x: (order.get(str(x.get("tag")), 9), x.get("updated") or ""),
     )
 
-    period = f"Активность в чатах за последние {days} дн."
+    period = f"Сообщения в чатах за последние {days} дн."
     period_from = None
     if since is not None:
         period_from = since.date().isoformat()
-        period = f"Активность в чатах с {period_from}"
+        period = f"Сообщения в чатах с {period_from}"
     if incomplete:
         period = f"{period} (загрузку остановили раньше времени)"
 
@@ -153,6 +172,7 @@ def build_report(
             "exportedAt": exported_at,
             "source": source,
             "incomplete": incomplete,
+            "window": window_info(stats),
             "total": len(records),
             "invites": counts["invites"],
             "tests": counts["tests"],

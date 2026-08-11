@@ -22,6 +22,20 @@ export type Lead = {
   lastFrom?: string
 }
 
+/**
+ * Чем проверить окно в днях: по какому полю резали, сколько чатов просмотрели
+ * и какие даты сообщений попали в выборку. У отчёта из файла окна нет.
+ */
+export type ReportWindow = {
+  field: string
+  scanned: number
+  kept: number
+  pagesRead: number
+  stoppedEarly: boolean
+  oldest: string
+  newest: string
+}
+
 export type ReportMeta = {
   period: string
   periodFrom?: string | null
@@ -29,6 +43,7 @@ export type ReportMeta = {
   exportedAt: string
   source: string
   incomplete?: boolean
+  window?: ReportWindow | null
   total: number
   invites: number
   tests: number
@@ -116,6 +131,20 @@ export const LEAD_TAG_LABELS: Record<LeadTag, string> = {
 }
 
 export const DEFAULT_SYNC_DAYS = 60
+export const MIN_SYNC_DAYS = 1
+export const MAX_SYNC_DAYS = 180
+
+/**
+ * Приводит введённое число дней к диапазону, который принимает API.
+ */
+export function clampSyncDays(value: unknown): number {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_SYNC_DAYS
+  }
+  return Math.min(MAX_SYNC_DAYS, Math.max(MIN_SYNC_DAYS, Math.round(parsed)))
+}
+
 export const DONE_STORAGE_KEY = 'hh-leads-done'
 export const PREFS_STORAGE_KEY = 'hh-leads-prefs'
 export const SESSION_STORAGE_KEY = 'hh-leads-session-id'

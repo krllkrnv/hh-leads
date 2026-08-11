@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import time
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable
 from urllib.parse import unquote
@@ -17,6 +18,13 @@ DEFAULT_UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 )
+
+# Поле, по которому считается окно в днях, и его запасной вариант.
+ACTIVITY_FIELD = "lastMessage.creationTime"
+ACTIVITY_FALLBACK_FIELD = "lastActivityTime"
+
+# Сколько подряд страниц без единого чата в окне читаем, прежде чем остановиться.
+STALE_PAGES_LIMIT = 5
 
 
 class HhAuthError(Exception):
@@ -279,6 +287,39 @@ def parse_dt(value: Any) -> datetime | None:
     return dt
 
 
+def _int_or_none(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def chat_activity_at(chat: dict[str, Any]) -> datetime | None:
+    """Время последнего сообщения в чате.
+
+    lastActivityTime в списке Chatik уезжает вперёд и без новых сообщений,
+    в том числе когда чат читает наш же клиент, поэтому окно в днях считаем
+    по времени последнего сообщения. lastActivityTime берём только тогда,
+    когда в элементе списка нет lastMessage.
+    """
+    message_at = parse_dt((chat.get("lastMessage") or {}).get("creationTime"))
+    if message_at is not None:
+        return message_at
+    return parse_dt(chat.get(ACTIVITY_FALLBACK_FIELD))
+
+
+@dataclass
+class ChatListResult:
+    """Отобранные чаты плюс то, по чему этот отбор можно проверить."""
+
+    items: list[dict[str, Any]] = field(default_factory=list)
+    scanned: int = 0
+    pages_read: int = 0
+    stopped_early: bool = False
+    oldest: datetime | None = None
+    newest: datetime | None = None
+
+
 def normalize_hh_host(host: str | None) -> str:
     value = (host or DEFAULT_HH_HOST).strip().rstrip("/")
     if not value.startswith("http"):
@@ -435,18 +476,23 @@ class ChatikClient:
     def iter_chats(
         self,
         since: datetime,
-        on_page: Callable[[int, int], None] | None = None,
+        on_page: Callable[[int, int, int], None] | None = None,
         should_cancel: Callable[[], bool] | None = None,
-    ) -> list[dict[str, Any]]:
-        """Список чатов, у которых последняя активность не старше since.
+        max_stale_pages: int = STALE_PAGES_LIMIT,
+    ) -> ChatListResult:
+        """Чаты, где последнее сообщение не старше since.
 
-        Chatik не гарантирует порядок от новых к старым по lastActivityTime:
-        на одной странице и между страницами свежие чаты могут стоять после
-        старых. Поэтому обходим все страницы списка и фильтруем по since
-        локально. Чаты без даты активности в окно не попадают.
+        Chatik не отдаёт список строго от новых к старым: и на одной странице,
+        и между страницами свежий чат может стоять после старого. Поэтому
+        страницу разбираем целиком и не обрываем обход на первом старом чате.
+        Остановка происходит только после max_stale_pages страниц подряд, где
+        в окно не попал ни один чат; при max_stale_pages = 0 читаем весь список.
+        Чаты, у которых нет ни времени сообщения, ни lastActivityTime, в окно
+        не попадают.
         """
-        items: list[dict[str, Any]] = []
+        result = ChatListResult()
         page = 0
+        stale_pages = 0
         while True:
             if should_cancel is not None and should_cancel():
                 raise SyncCancelled("Синхронизация отменена")
@@ -467,14 +513,20 @@ class ChatikClient:
             if not chunk:
                 break
 
+            result.pages_read += 1
+            result.scanned += len(chunk)
+            kept_on_page = 0
             for chat in chunk:
-                activity = parse_dt(chat.get("lastActivityTime")) or parse_dt(
-                    (chat.get("lastMessage") or {}).get("creationTime")
-                )
+                activity = chat_activity_at(chat)
                 if activity is None or activity < since:
                     continue
+                kept_on_page += 1
+                if result.oldest is None or activity < result.oldest:
+                    result.oldest = activity
+                if result.newest is None or activity > result.newest:
+                    result.newest = activity
                 chat_id = str(chat.get("id") or "")
-                items.append(
+                result.items.append(
                     {
                         "chat": chat,
                         "display": display.get(chat_id) or display.get(str(chat.get("id"))) or {},
@@ -483,14 +535,19 @@ class ChatikClient:
                 )
 
             if on_page is not None:
-                on_page(page, len(items))
+                on_page(page, len(result.items), result.scanned)
 
-            pages = chats_block.get("pages")
-            if pages is not None:
-                if page >= int(pages) - 1:
+            total_pages = _int_or_none(chats_block.get("pages"))
+            if total_pages is not None and page >= total_pages - 1:
+                break
+
+            if max_stale_pages > 0:
+                stale_pages = stale_pages + 1 if kept_on_page == 0 else 0
+                if stale_pages >= max_stale_pages:
+                    result.stopped_early = True
                     break
             page += 1
-        return items
+        return result
 
     def get_chat_data(self, chat_id: str) -> dict[str, Any]:
         params: dict[str, Any] = {
@@ -524,11 +581,7 @@ class ChatikClient:
         if messages is None or owner is None or key is None:
             return data
         items = list(messages.get("items") or [])
-        pages = messages.get("pages")
-        try:
-            page_count = int(pages) if pages is not None else 1
-        except (TypeError, ValueError):
-            page_count = 1
+        page_count = _int_or_none(messages.get("pages")) or 1
         if page_count <= 1:
             return data
 

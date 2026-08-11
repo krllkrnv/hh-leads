@@ -75,10 +75,32 @@ const stats = computed(() => [
   { label: 'Собеседование', value: String(props.meta.hhStatus.interview), tone: 'success' },
 ])
 
+/**
+ * Строки о том, как отбирали чаты. Есть только у синхронизации: отчёт,
+ * открытый из файла, ничего не фильтровал заново.
+ */
+const windowRows = computed(() => {
+  const win = props.meta.window
+  if (!win) {
+    return []
+  }
+  const field = win.field.startsWith('lastMessage')
+    ? 'по дате последнего сообщения'
+    : `по полю ${win.field}`
+  const dates =
+    win.oldest && win.newest ? `${formatDay(win.oldest)} — ${formatDay(win.newest)}` : '—'
+  return [
+    { label: 'Отбор', value: field },
+    { label: 'Просмотрено', value: `${win.scanned} чатов в списке` },
+    { label: 'Сообщения в выборке', value: dates },
+  ]
+})
+
 const metaRows = computed(() => [
   { label: 'Период', value: periodLabel.value },
   { label: 'Источник', value: sourceLabel.value },
   { label: 'Обновлён', value: formatExportedAt(props.meta.exportedAt) },
+  ...windowRows.value,
   { label: 'Тестовые', value: String(props.meta.tests) },
   { label: 'Ожидание', value: String(props.meta.actions.wait) },
   { label: 'Автоответ', value: String(props.meta.actions.bot) },

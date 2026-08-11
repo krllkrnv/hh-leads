@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
@@ -13,6 +13,9 @@ from openpyxl.utils import get_column_letter
 from hh_leads.classify import ACTION_PRIORITY, ChatRecord
 from hh_leads.report.common import fmt_dt
 from hh_leads.report.model import action_counts
+
+if TYPE_CHECKING:
+    from hh_leads.pipeline import SyncStats
 
 COLUMNS = [
     "Компания",
@@ -113,6 +116,7 @@ def write_excel(
     out_path: Path,
     days: int,
     since: datetime,
+    stats: SyncStats | None = None,
 ) -> None:
     wb = Workbook()
     ws_sum = wb.active
@@ -131,6 +135,16 @@ def write_excel(
         ("Период", f"последние {days} дней (с {since.date().isoformat()})"),
         ("Дата выгрузки", datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")),
         ("Всего чатов", len(records)),
+    ]
+    if stats is not None:
+        summary_rows += [
+            ("Поле для окна", stats.field),
+            ("Просмотрено чатов в списке", stats.scanned),
+            ("Прочитано страниц списка", stats.pages_read),
+            ("Самое старое сообщение в выборке", fmt_dt(stats.oldest)),
+            ("Самое свежее сообщение в выборке", fmt_dt(stats.newest)),
+        ]
+    summary_rows += [
         ("Приглашения", counts["Приглашения"]),
         ("Тестовые", counts["Тестовые"]),
         ("Обсуждения", counts["Обсуждения"]),

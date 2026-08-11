@@ -2,21 +2,59 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from hh_leads.classify import ChatRecord, classify, extract_messages, extract_meta
-from hh_leads.hh_client import ChatikClient, SyncCancelled, suggest_hh_host_from_cookie
+from hh_leads.hh_client import (
+    ACTIVITY_FIELD,
+    ChatikClient,
+    ChatListResult,
+    SyncCancelled,
+    suggest_hh_host_from_cookie,
+)
 from hh_leads.progress import ProgressCb, emit
+
+
+@dataclass
+class SyncStats:
+    """Чем можно проверить, что окно в днях действительно применилось."""
+
+    field: str = ACTIVITY_FIELD
+    scanned: int = 0
+    kept: int = 0
+    pages_read: int = 0
+    stopped_early: bool = False
+    oldest: datetime | None = None
+    newest: datetime | None = None
+
+    @classmethod
+    def from_list(cls, result: ChatListResult) -> SyncStats:
+        return cls(
+            scanned=result.scanned,
+            kept=len(result.items),
+            pages_read=result.pages_read,
+            stopped_early=result.stopped_early,
+            oldest=result.oldest,
+            newest=result.newest,
+        )
 
 
 class PartialSync(Exception):
     """Синхронизацию остановили: в records уже лежат разобранные чаты, их можно сохранить."""
 
-    def __init__(self, records: list[ChatRecord], since: datetime, message: str = "") -> None:
+    def __init__(
+        self,
+        records: list[ChatRecord],
+        since: datetime,
+        stats: SyncStats | None = None,
+        message: str = "",
+    ) -> None:
         super().__init__(message or "Синхронизация отменена")
         self.records = records
         self.since = since
+        self.stats = stats or SyncStats()
 
 
 def _company_label(entry: dict[str, Any]) -> str:
@@ -45,7 +83,7 @@ def fetch_records(
     hh_host: str | None = None,
     on_progress: ProgressCb | None = None,
     should_cancel: Any | None = None,
-) -> tuple[list[ChatRecord], datetime]:
+) -> tuple[list[ChatRecord], datetime, SyncStats]:
     since = datetime.now(timezone.utc) - timedelta(days=days)
 
     def cancelled() -> bool:
@@ -54,7 +92,7 @@ def fetch_records(
     emit(
         on_progress,
         "start",
-        f"Начинаю синхронизацию: возьму чаты, где что-то происходило за последние {days} дн.",
+        f"Начинаю синхронизацию: возьму чаты с сообщениями за последние {days} дн.",
     )
     emit(on_progress, "auth", "Проверяю cookie и подключаюсь к чатам hh…")
 
@@ -74,18 +112,19 @@ def fetch_records(
                 "Не удалось определить ваш профиль — сообщения «я» и «HR» могут путаться",
             )
 
-        emit(on_progress, "list", "Собираю список чатов по последней активности…")
+        emit(on_progress, "list", "Собираю список чатов по дате последнего сообщения…")
 
-        def on_page(page: int, collected: int) -> None:
+        def on_page(page: int, collected: int, scanned: int) -> None:
             emit(
                 on_progress,
                 "list",
-                f"Страница списка {page + 1}: в окне {days} дн. уже {collected} чатов",
+                f"Страница списка {page + 1}: просмотрено {scanned} чатов, "
+                f"в окно {days} дн. попало {collected}",
                 current=collected,
             )
 
         try:
-            chat_entries = client.iter_chats(
+            listing = client.iter_chats(
                 since,
                 on_page=on_page,
                 should_cancel=cancelled if should_cancel else None,
@@ -94,11 +133,14 @@ def fetch_records(
             emit(on_progress, "warn", "Остановили, пока ещё собирался список чатов")
             raise PartialSync([], since) from None
 
-        total = len(chat_entries)
+        stats = SyncStats.from_list(listing)
+        chat_entries = listing.items
+        total = stats.kept
         emit(
             on_progress,
             "list",
-            f"За {days} дн. по активности нашлось чатов: {total}",
+            f"Просмотрено чатов в списке: {stats.scanned}. "
+            f"С сообщениями за {days} дн.: {total}",
             current=total,
             total=total,
         )
@@ -113,7 +155,7 @@ def fetch_records(
                     current=idx,
                     total=total,
                 )
-                raise PartialSync(records, since)
+                raise PartialSync(records, since, stats)
 
             chat = entry["chat"]
             chat_id = str(chat.get("id") or "")
@@ -178,4 +220,4 @@ def fetch_records(
             records.append(classify(meta, messages))
 
     emit(on_progress, "build", f"Собираю отчёт по {len(records)} чатам…")
-    return records, since
+    return records, since, stats

@@ -43,6 +43,7 @@ type ReportState = {
   includeKeywords: string
   excludeKeywords: string
   showSetup: boolean
+  syncDays: number
   doneMap: Record<string, boolean>
   progressStage: ProgressStage | null
   progressMessage: string
@@ -68,6 +69,7 @@ export function useReport() {
     includeKeywords: prefs.includeKeywords,
     excludeKeywords: prefs.excludeKeywords,
     showSetup: false,
+    syncDays: prefs.days,
     doneMap: loadDoneMap(),
     progressStage: null,
     progressMessage: '',
@@ -83,13 +85,21 @@ export function useReport() {
   let abortController: AbortController | null = null
 
   watch(
-    () => [state.filter, state.hideClosed, state.includeKeywords, state.excludeKeywords] as const,
-    ([filter, hideClosed, includeKeywords, excludeKeywords]) => {
+    () =>
+      [
+        state.filter,
+        state.hideClosed,
+        state.includeKeywords,
+        state.excludeKeywords,
+        state.syncDays,
+      ] as const,
+    ([filter, hideClosed, includeKeywords, excludeKeywords, days]) => {
       savePrefs({
         filter,
         hideClosed,
         includeKeywords,
         excludeKeywords,
+        days,
       } satisfies ReportPrefs)
     },
   )
@@ -188,6 +198,7 @@ export function useReport() {
   }
 
   async function runSync(cookie: string, days: number, hhHost?: string): Promise<void> {
+    state.syncDays = days
     await runJob(
       'sync',
       (signal, onProgress) =>
