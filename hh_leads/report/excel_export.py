@@ -140,7 +140,9 @@ def write_excel(
         summary_rows += [
             ("Поле для окна", stats.field),
             ("Просмотрено чатов в списке", stats.scanned),
-            ("Прочитано страниц списка", stats.pages_read),
+            ("Прочитано порций списка", stats.pages_read),
+            ("Повторы API пропущены", stats.duplicates),
+            ("Всего в Chatik (found)", stats.list_found if stats.list_found is not None else ""),
             ("Самое старое сообщение в выборке", fmt_dt(stats.oldest)),
             ("Самое свежее сообщение в выборке", fmt_dt(stats.newest)),
         ]

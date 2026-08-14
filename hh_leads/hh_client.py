@@ -315,6 +315,8 @@ class ChatListResult:
     items: list[dict[str, Any]] = field(default_factory=list)
     scanned: int = 0
     pages_read: int = 0
+    duplicates: int = 0
+    list_found: int | None = None
     stopped_early: bool = False
     oldest: datetime | None = None
     newest: datetime | None = None
@@ -482,41 +484,59 @@ class ChatikClient:
     ) -> ChatListResult:
         """Чаты, где последнее сообщение не старше since.
 
-        Chatik не отдаёт список строго от новых к старым: и на одной странице,
-        и между страницами свежий чат может стоять после старого. Поэтому
-        страницу разбираем целиком и не обрываем обход на первом старом чате.
-        Остановка происходит только после max_stale_pages страниц подряд, где
-        в окно не попал ни один чат; при max_stale_pages = 0 читаем весь список.
-        Чаты, у которых нет ни времени сообщения, ни lastActivityTime, в окно
-        не попадают.
+        Актуальный Chatik листает список курсором: в ответе приходит nextFrom,
+        следующий запрос передаёт его как from. Параметр page больше не двигает
+        выдачу и возвращает одну и ту же первую порцию, поэтому на нём нельзя
+        строить обход.
+
+        Список в целом идёт от новых к старым по времени сообщения, но иногда
+        свежий чат встречается позже. Поэтому порцию разбираем целиком и не
+        останавливаемся на первом старом чате. Обход рвём после max_stale_pages
+        порций подряд без единого чата в окне; при max_stale_pages = 0 читаем
+        весь список. Чаты без даты сообщения и без lastActivityTime пропускаем.
         """
         result = ChatListResult()
-        page = 0
+        cursor: str | None = None
+        step = 0
         stale_pages = 0
+        seen_ids: set[str] = set()
         while True:
             if should_cancel is not None and should_cancel():
                 raise SyncCancelled("Синхронизация отменена")
 
-            data = self._get(
-                "/chatik/api/chats",
-                params={
-                    "filterUnread": "false",
-                    "filterHasTextMessage": "false",
-                    "do_not_track_session_events": "true",
-                    "page": page,
-                },
-            )
+            params: dict[str, Any] = {
+                "filterUnread": "false",
+                "filterHasTextMessage": "false",
+                "do_not_track_session_events": "true",
+            }
+            if cursor:
+                params["from"] = cursor
+
+            data = self._get("/chatik/api/chats", params=params)
             chats_block = (data or {}).get("chats") or {}
             chunk = chats_block.get("items") or []
             display = (data or {}).get("chatsDisplayInfo") or {}
             resources = (data or {}).get("resources") or {}
+            next_from = chats_block.get("nextFrom")
+            found = _int_or_none(chats_block.get("found"))
+            if found is not None:
+                result.list_found = found
+
             if not chunk:
                 break
 
             result.pages_read += 1
-            result.scanned += len(chunk)
             kept_on_page = 0
             for chat in chunk:
+                chat_id = str(chat.get("id") or "")
+                if not chat_id:
+                    continue
+                if chat_id in seen_ids:
+                    result.duplicates += 1
+                    continue
+                seen_ids.add(chat_id)
+                result.scanned += 1
+
                 activity = chat_activity_at(chat)
                 if activity is None or activity < since:
                     continue
@@ -525,7 +545,6 @@ class ChatikClient:
                     result.oldest = activity
                 if result.newest is None or activity > result.newest:
                     result.newest = activity
-                chat_id = str(chat.get("id") or "")
                 result.items.append(
                     {
                         "chat": chat,
@@ -535,18 +554,18 @@ class ChatikClient:
                 )
 
             if on_page is not None:
-                on_page(page, len(result.items), result.scanned)
-
-            total_pages = _int_or_none(chats_block.get("pages"))
-            if total_pages is not None and page >= total_pages - 1:
-                break
+                on_page(step, len(result.items), result.scanned)
 
             if max_stale_pages > 0:
                 stale_pages = stale_pages + 1 if kept_on_page == 0 else 0
                 if stale_pages >= max_stale_pages:
                     result.stopped_early = True
                     break
-            page += 1
+
+            if not next_from or next_from == cursor:
+                break
+            cursor = str(next_from)
+            step += 1
         return result
 
     def get_chat_data(self, chat_id: str) -> dict[str, Any]:

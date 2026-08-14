@@ -105,6 +105,8 @@ def window_info(stats: SyncStats | None) -> dict[str, Any] | None:
         "scanned": stats.scanned,
         "kept": stats.kept,
         "pagesRead": stats.pages_read,
+        "duplicates": stats.duplicates,
+        "listFound": stats.list_found,
         "stoppedEarly": stats.stopped_early,
         "oldest": fmt_dt(stats.oldest),
         "newest": fmt_dt(stats.newest),

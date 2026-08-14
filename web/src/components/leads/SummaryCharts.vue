@@ -89,11 +89,15 @@ const windowRows = computed(() => {
     : `по полю ${win.field}`
   const dates =
     win.oldest && win.newest ? `${formatDay(win.oldest)} — ${formatDay(win.newest)}` : '—'
-  return [
+  const rows = [
     { label: 'Отбор', value: field },
     { label: 'Просмотрено', value: `${win.scanned} чатов в списке` },
     { label: 'Сообщения в выборке', value: dates },
   ]
+  if (typeof win.listFound === 'number') {
+    rows.push({ label: 'В списке Chatik', value: String(win.listFound) })
+  }
+  return rows
 })
 
 const metaRows = computed(() => [

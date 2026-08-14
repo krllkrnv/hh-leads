@@ -31,6 +31,8 @@ export type ReportWindow = {
   scanned: number
   kept: number
   pagesRead: number
+  duplicates?: number
+  listFound?: number | null
   stoppedEarly: boolean
   oldest: string
   newest: string

@@ -53,6 +53,8 @@ class FakeClient:
             items=[{"chat": chat, "display": {}, "list_resources": {}}],
             scanned=137,
             pages_read=3,
+            duplicates=2,
+            list_found=400,
             stopped_early=True,
             oldest=oldest,
             newest=newest,
@@ -103,6 +105,8 @@ def test_report_window_is_verifiable(fake_client: None) -> None:
     assert window["scanned"] == 137
     assert window["kept"] == 1
     assert window["pagesRead"] == 3
+    assert window["duplicates"] == 2
+    assert window["listFound"] == 400
     assert window["stoppedEarly"] is True
     assert window["oldest"] and window["newest"]
     assert is_valid_report(report)

@@ -25,6 +25,8 @@ class SyncStats:
     scanned: int = 0
     kept: int = 0
     pages_read: int = 0
+    duplicates: int = 0
+    list_found: int | None = None
     stopped_early: bool = False
     oldest: datetime | None = None
     newest: datetime | None = None
@@ -35,6 +37,8 @@ class SyncStats:
             scanned=result.scanned,
             kept=len(result.items),
             pages_read=result.pages_read,
+            duplicates=result.duplicates,
+            list_found=result.list_found,
             stopped_early=result.stopped_early,
             oldest=result.oldest,
             newest=result.newest,
@@ -118,7 +122,7 @@ def fetch_records(
             emit(
                 on_progress,
                 "list",
-                f"Страница списка {page + 1}: просмотрено {scanned} чатов, "
+                f"Порция списка {page + 1}: уникальных чатов {scanned}, "
                 f"в окно {days} дн. попало {collected}",
                 current=collected,
             )
@@ -136,10 +140,20 @@ def fetch_records(
         stats = SyncStats.from_list(listing)
         chat_entries = listing.items
         total = stats.kept
+        found_part = (
+            f" в списке Chatik заявлено {stats.list_found}."
+            if stats.list_found is not None
+            else ""
+        )
+        dup_part = (
+            f" Повторных ответов API пропущено: {stats.duplicates}."
+            if stats.duplicates
+            else ""
+        )
         emit(
             on_progress,
             "list",
-            f"Просмотрено чатов в списке: {stats.scanned}. "
+            f"Уникальных чатов просмотрено: {stats.scanned}.{found_part}{dup_part} "
             f"С сообщениями за {days} дн.: {total}",
             current=total,
             total=total,
